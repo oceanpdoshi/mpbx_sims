@@ -1,0 +1,10 @@
+[project]
+name = "mpbx-sims"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "mpbjax",
+]
+
+[tool.uv.sources]
+mpbjax = { path = "../mpbx/python", editable = true }
