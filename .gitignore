@@ -1,3 +1,7 @@
+# Claude outputs
+handoff_tfln_modesolve/
+chunked_sweep/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
