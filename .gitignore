@@ -1,6 +1,6 @@
 # Claude outputs
-handoff_tfln_modesolve/
-chunked_sweep/
+handoff_tfln_modesolve/results/
+chunked_sweep/results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
