@@ -15,7 +15,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+ROOT = os.path.dirname(HERE)                        # utils/, geometry_gen/ (HERE: tfln_modes, tfln_plots)
+sys.path[:0] = [p for p in (ROOT, HERE) if p not in sys.path]
 from utils.setup_jax import setup_jax
 
 setup_jax("cpu")
@@ -24,7 +25,7 @@ import numpy as np
 from mpbjax import modes as Mo
 
 import geometry_gen.tfln_rib as R
-import tfln_modes as M
+import sim_core.tfln_modes as M
 
 ok_all = True
 

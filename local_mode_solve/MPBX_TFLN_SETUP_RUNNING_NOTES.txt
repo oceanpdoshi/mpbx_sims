@@ -1,0 +1,84 @@
+There is likely mode clipping at longer wavelengths (1.5-1.8um). Espsecially higher order modes. 
+At shorter wavelengths, you need to solve w/more eigenvectors to guarantee that you actuall get the TE00 and TM00 modes.
+
+A key note on parallelization, is that the geometry step (RibGeometry -> RibDielectric) is slow.
+	So very likely, the outer loop on parallelization (different Superlcloud tasks) will be different sets of geometries.
+	Then, you parallelize with some multiprocessing (up to memory limit) across different wavelengths.
+	The tricky part, is that the grid may change. So perhaps you chunk things intentionally, or eat the extra cost...
+	The same argument for adaptiveness is true for the eigenvectors.
+		You need nev = 6 for 1000-1200nm
+		You need nev = 8 for 650-1000nm
+		You need nev = 12 for 400-650nm.
+		
+		
+Summary of the summary:
+- rotate the crystal, not the lab coordinates
+- The TE/TM fractions are computed accordingly.
+- HG labeling or track_mode are the correct way of labeling the modes. The mode index is simply the ranked order of the effective index at a given wavelength.
+- Geometry edge cases are handled (no cladding, or no slab remaining)
+- align_to_grid handles sub-pixel placement
+- "Production grid" == 6 x 6 um, dx = 25nm, dy = 12.5nm (240 x 480 px), 1/3 pixel off-center. Again, this has issues at longer wavelengths.
+- Simulation pretty much matches tidy3D, error is worse at 1.6um. Makes sense, because again, I'm getting mode clipping.
+- Run everything on CPU.
+- It takes care of the cosntant re-compliation error for the iterative eigensolve algo implementation (LOBPCG)
+- Be careful about parity (either use odd Nx, Ny and parity=True, or use even for faster FFT, and parity = False)
+
+Take a closer look at how the files are saved, and make suire it's done in a scalable fashion.
+
+Ok after going over the README, can you adjust the scripts under chunked_sweep? 
+The cluster I will be running everything on is MIT Supercloud, which uses Slurm and custom commands built by the cluster managers. Everything on the cluster is linux-based, and all of the docs are  here.
+https://mit-supercloud.github.io/supercloud-docs/
+Slurm docs are here:
+https://slurm.schedmd.com/sacct.html
+
+Read through the Supercloud docs thoroughly, as that will entirely guide you how to setup the simulation run scripts, building upon the core code you've already built.  See the example scripts at the two paths below that used a much older version of the core mode solve code, but are a good example in terms of how I was previously running stuff on the cluster. Note that I was previously using Julia, though now everything I'm doing with MPBX is using Jax/Python.
+C:\Users\Sagar\poe_research\github\optimode_simulations\simulation-scripts\forward_parallel_geo_sweep
+C:\Users\Sagar\poe_research\github\optimode_simulations\simulation-scripts\forward_parallel_wav_sweep_single_geo
+
+The typical cluster use case is:
+
+1. I ssh into a login node, which is connected to the internet / I have a copy of my repository that lives there (git clone ...)
+2. I cd into my repo directory, and then run a shell script called (for example) "run_tfln_mode_solve_single_geo_parallel_wavelength.sh" which handles the python setup and job submission. Note that the cluster nodes that the job is run on DON'T HAVE ACCESS TO THE INTERNET, just LAN. Consequently, the docs extensively cover package management / how to navigate that. 
+3. The job runs and then saves the files in appropriate locations where I can access them later, (and not in some temp location that's deleted after the job run).
+4. I analyze the data using a plotting Jupyter notebook or other plotting scrips, and I either keep the data on the cluster or download it locally to back it up.
+
+
+A note on file sizes since the E-fields can make file sizes blow up - as a rule of thumb, each file should be ~100MB to 1-2GB. So I'm thinking that even in the case of save_fields =True, all of the data can be saved into two files:
+
+1. For 1 WG geometry, a csv or h5 file with everything (all wavelengths) except the fields for quick I/O later on
+2. For 1 WG geometry, an h5 file with everything (all wavelengths) including the fields, in case those need to be accessed later. If the file size becomes too large, perhaps this can be broken up into two files, lambda=0.4-1.0um, and lambda=1.0um-2.0um (SH and FH bands)
+
+
+Definitely, different waveguide geometries should always be separate files. 
+In general, there will be two scripts:
+
+1. Submit a single waveguide geometry = 1 task
+2. Submit multiple waveguide geometries = multiple tasks 
+
+
+The parallelization hierarchy is:
+Level 1: 1 task = 1 waveguide geometry.
+
+In the case of a single waveguide geometry, this 1 task will be allotted 48 cores and 192GB of memory (1 full node, all to itself). See the --cpus-per-task, and note that these can be adjusted in the script. 
+
+It may be advantageous for multi-geometry sweeps to reduce the number of cores <-> memory per task, so that more tasks can be run concurrently. The way to think about it, is that a node has 48 cpus, so you could submit tasks that use 1,2 , 4, 8, 16, or 24 cpus since  those are factors of 48. You can then run more tasks concurrently. I have access to 8 nodes (48 cpus, 192GB of memory each) right now, but I could get access to up to 24 nodes if I ask the admins. The number of concurrent tasks limit is very large (240).
+
+Level 2: Within a task, parallelize across wavelength (multiprocessing). 
+
+This is in addition to the chunking strategy that we developed earlier. But I'd like to make some changes that reflect some relaxed constraints on my part. The fine grids were actually giving acceptable enough ng and neff errors, so there is no need for the double grid strategy. 
+
+The chunks should be (and make sure I can adjust these easily in the future as needed, and use the 1/3 pixel interface alignment for all chunks. And feel free to adjust Lx/Ly slightly to make sure Dx/Dy fit nicely.)
+
+1. 0.4-0.6um, nev=12, dx/dy = 12.5nm/12.5nm, Lx/Ly=4um/4um
+2. 0.6um-1.0um, nev=10 dx/dy =12.5nm/12.5nm, Lx/Ly=5um/5um
+3. 1.0um-1.3um, nev=8, dx/dy = 20nm/20nm, Lx/Ly=6um/6um
+4. 1.3um-1.7um, nev=6, dx/dy = 25nm/25nm, Lx/Ly=7um/7um
+
+1. 1.7um-2.0um, nev=6, dx/dy = 25nm/25nm, Lx/Ly=8um/8um
+
+
+If the window sizes and discretization chosen above will result in either: excessive runtime, large errors for relevant modes (insufficient discretization, too small a simulation window), or missing important modes, please suggest alternatives.
+
+In regards to the parity solve, the number of eigenvectors I listed above was with use_parity = False in mind. Can you explain using your existing results whether or not use_parity results in a significant time save vs. just sizing the arrays nicely for fast FFTs?
+
+Zooming-out, the changes I've listed above are to generate human-readable, simple scripts that are "mostly-bulletproof" in giving me accurate modal dispersion data for my waveguides. Moreover, I want to work with manageable file sizes. Not everything needs to be hyper-optimized, it just need to work robustly at a reasonable pace. For reference, the old code used to routinely take a few hours to compute all the wavelengths for a given waveguide, ex: 0.4um-2.0um, 10nm step. The massive parallelism is ultimately what we're trying to leverage here.

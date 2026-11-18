@@ -15,7 +15,8 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+ROOT = os.path.dirname(HERE)                        # utils/, geometry_gen/ (HERE: tfln_modes, tfln_plots)
+sys.path[:0] = [p for p in (ROOT, HERE) if p not in sys.path]
 
 
 def load_tidy3d_csv(path):
@@ -29,7 +30,7 @@ def load_tidy3d_csv(path):
 
 
 def compare(sweep, td, targets=("TE00", "TM00")):
-    import tfln_modes as M
+    import sim_core.tfln_modes as M
     out = {}
     for tgt in targets:
         tr = M.track_mode(sweep, tgt)
@@ -56,8 +57,8 @@ def main():
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import tfln_modes as M
-    from tfln_plots import SERIES
+    import sim_core.tfln_modes as M
+    from sim_core.tfln_plots import SERIES
 
     sweep = M.ModeSweep.load(sys.argv[1], fields=False)
     td = load_tidy3d_csv(sys.argv[2])

@@ -15,16 +15,30 @@
 import os
 import sys
 
+
+def _find_root(start):
+    """Walk up from `start` to the repo root: the folder holding geometry_gen/ and utils/."""
+    d = os.path.abspath(start)
+    while not (os.path.isfile(os.path.join(d, "geometry_gen", "tfln_rib.py"))
+               and os.path.isfile(os.path.join(d, "utils", "setup_jax.py"))):
+        if os.path.dirname(d) == d:
+            raise FileNotFoundError(f"no geometry_gen/ + utils/ above {os.path.abspath(start)}: set ROOT by hand")
+        d = os.path.dirname(d)
+    return d
+
+
 try:
-    HERE = os.path.dirname(os.path.abspath(__file__))
-except NameError:                                   # interactive kernel: no __file__
-    HERE = os.getcwd() if os.path.exists("tfln_rib.py") else os.path.abspath("handoff_tfln_modesolve")
-assert os.path.exists(os.path.join(HERE, "tfln_rib.py")), f"set HERE to the folder with tfln_rib.py (got {HERE})"
-sys.path.insert(0, HERE)
+    START = os.path.dirname(os.path.abspath(__file__))
+except NameError:                                   # interactive kernel: no __file__, start from the cwd
+    START = os.getcwd()
+ROOT = _find_root(START)                            # utils/, geometry_gen/
+HERE = os.path.join(ROOT, "handoff_tfln_modesolve") # tfln_modes.py, tfln_plots.py; results/ go here
+assert os.path.isfile(os.path.join(HERE, "tfln_modes.py")), f"tfln_modes.py not found in {HERE}"
+for p in (HERE, ROOT):                              # re-running the cell does not stack duplicates
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from utils.setup_jax import setup_jax
-
-mpbjax = setup_jax("cpu")                           # BEFORE importing anything that imports mpbjax
 
 import numpy as np
 import matplotlib
@@ -34,8 +48,8 @@ if BATCH:
 import matplotlib.pyplot as plt
 
 import geometry_gen.tfln_rib as R
-import tfln_modes as M
-import tfln_plots as P
+import sim_core.tfln_modes as M
+import sim_core.tfln_plots as P
 
 FULL = "--full" in sys.argv
 OUT = os.path.join(HERE, "results", "sweep_full" if FULL else "sweep_quick")

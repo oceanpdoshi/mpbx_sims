@@ -1,0 +1,4 @@
+# Shell / Slurm scripts must keep Unix line endings, also when the repo is edited on Windows
+# (a CRLF script fails on the cluster with "$'\r': command not found").
+*.sh      text eol=lf
+*.sbatch  text eol=lf

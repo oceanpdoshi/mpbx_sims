@@ -24,7 +24,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+ROOT = os.path.dirname(HERE)                        # utils/, geometry_gen/ (HERE: tfln_modes, tfln_plots)
+sys.path[:0] = [p for p in (ROOT, HERE) if p not in sys.path]
 
 from utils.setup_jax import setup_jax
 
@@ -36,8 +37,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import geometry_gen.tfln_rib as R
-import tfln_modes as M
-from tfln_plots import SERIES, INK
+import sim_core.tfln_modes as M
+from sim_core.tfln_plots import SERIES, INK
 
 LABELS = ("TE00", "TM00", "TE10", "TM10")
 

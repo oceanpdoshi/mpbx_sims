@@ -1,6 +1,8 @@
 # Claude outputs
-handoff_tfln_modesolve/results/
+local_mode_solve/results/
 chunked_sweep/results/
+# cluster run folders (chunked_sweep/supercloud/*.sh write to <repo>/outputs by default)
+outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
