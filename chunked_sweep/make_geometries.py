@@ -26,6 +26,10 @@ def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "geometries.csv"
     rows = []
     for t, ef, w, sw, tc in itertools.product(T_LN, ETCH_FRACTION, W_TOP, SIDEWALL_DEG, T_CLAD):
+        # round to 1 pm / 1e-6 deg: lists built by repeated addition carry float noise
+        # (0.40800000000000003), and an unrounded t_ln next to a rounded etch leaves a
+        # ~1e-17 µm "slab" that the geometry treats as a real layer
+        t, w, sw, tc = (round(v, 6) for v in (t, w, sw, tc))
         etch = round(t * ef, 6)
         for name, th in (("t_ln", t), ("slab", t - etch)):
             if th > 0 and abs(th / DY - round(th / DY)) > 1e-6:
