@@ -216,6 +216,18 @@ What this does and does not tell us:
   3. A finer local Tidy3D solve at 1.0 µm (e.g. 800 × 800 on 6 × 6 µm), compared with the
      grid-converged mpbx values in `results/convergence/convergence.txt` (TE00 n_eff 1.974039 /
      n_g 2.27457, TM00 1.977556 / 2.45359).
+* **At long λ, large differences in the higher-order modes are expected.** The Tidy3D solve used
+  a fixed 6 × 6 µm window at every λ. That is enough for the fundamentals, but not for
+  higher-order modes as they approach cutoff and spread into the cladding. The mpbx window study
+  (§3) shows this at 2.0 µm: a 6 µm window leaves n_g errors of ~5e-4 for TE10 and ~9e-3 for
+  TM10. Near cutoff (TE20 / TM20 above ~1.5–1.6 µm for this geometry), the differences grow to
+  ~0.01 in n_eff and ~0.1 in n_g. Past cutoff, Tidy3D's n_eff drops below the SiO2 index, so it
+  is no longer a guided mode and the comparison means nothing. The production sweep
+  (`chunked_sweep/`) uses windows that grow with λ, up to 7.9 × 7.9 µm. When comparing the two,
+  trust only modes with a small `edge_frac`, and treat points flagged "field at window edge" as
+  unreliable. Tidy3D's boundary conditions differ from mpbx's periodic window, so its window
+  error will not equal these numbers, but the same modes are affected. This does **not** explain
+  the smooth ±2e-3 offset of the 00 modes above: a 6 µm window moves those by ≲ 2e-6 in n_eff.
 * Your 6-mode Tidy3D solve misses TE00 at 0.4 µm (TE00 is the 8th mode there). Use ≥ 8 modes,
   better 10.
 

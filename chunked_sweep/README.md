@@ -63,8 +63,10 @@ The earlier two-grid (Richardson) driver `run_chunked.py` / `combine_chunks.py` 
   automatically to leave ≥ 1.4·λ_max of cladding around the guide (§2.4); the dry-run and the summary
   file say so.
 * **Modes**: your totals, split equally into the two parity sectors (§2.3). If a target mode is
-  missing at some λ while the deepest solved mode of its sector is still guided, that λ (and the rest
-  of its work unit) is re-solved with 2 more modes per sector (§2.5).
+  missing at some λ while the deepest solved mode of its sector is still guided, that λ is re-solved
+  with 2 more modes per sector, kept for the rest of its work unit only if they found the target
+  (§2.5). Not when the sector shows an anticrossing instead (two guided modes with one label, or a
+  hybrid mode): the target is then present but mislabelled, and more modes would not help.
 * **One change: dy = 12.5 nm in every chunk** (§2.2). Your dx is kept. This costs ~25 % more than
   dy = dx (23 vs 19 desktop-core-hours per geometry) and buys a 2–4× smaller error above 1 µm and
   near-invisible steps at the chunk boundaries. Your exact proposal is one comment away in
@@ -182,7 +184,10 @@ Sector −1 holds TE00, TM10, TE20, TM30; sector +1 holds TM00, TE10, TM20, TE30
 geometry exactly or with one spare (A: 6/6 vs 5/6 needed at 0.4 µm; B: 5/5 vs 4/5 at 0.6 µm). A wider
 ridge has more lateral TM modes above TE30, so the automatic `NEV_EXTRA` re-solve (+2 per sector) is
 the safety net; the summary lists every λ where it fired, and every target that stayed missing (cut
-off, or not recognized by the node-count labels).
+off, or not recognized by the node-count labels). It does not fire at a same-sector anticrossing,
+where the two mixed modes can both get one label (TE20/TM30 at 0.71 µm, both "TE20"): the first
+production run re-solved that λ and the next two with 7 modes per sector for nothing (+63
+worker-minutes, +35 min of wall time). Such a λ gets a worker note instead.
 
 Above 1 µm only TE/TM 00 and 10 are required, but C still finds TE20/TM20/TE30/TM30 at 1.0–1.25 µm
 with 4 per sector, and the tables keep whatever is found.

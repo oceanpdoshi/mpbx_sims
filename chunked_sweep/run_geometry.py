@@ -339,21 +339,41 @@ def target_sector(t):
     return -1 if (t[:2] == "TE") == (int(t[2]) % 2 == 0) else +1
 
 
+HYBRID = (0.2, 0.8)     # TE fraction between these = hybrid (same thresholds as results_io's flag)
+
+
 def _labels_and_missing(sw, targets):
+    """Node-count labels of a solve, the targets not found among the guided modes, and of those:
+    ``deep_guided`` (the sector's deepest solved mode is still guided, so the target may sit below
+    it: re-solving with more modes can find it) and ``collided`` (the sector also holds two guided
+    modes with the same label, or a hybrid one: an anticrossing, where the target is almost surely
+    present but mislabelled, so more modes would not help)."""
     np = _W["np"]
-    labs = node_labels(sw.E[0], sw.data["te_frac"][0])
+    te = sw.data["te_frac"][0]
+    labs = node_labels(sw.E[0], te)
     names = [f"{p}{m}{n}" for p, m, n in labs]
     guided = sw.data["guided"][0]
     parity = sw.data["parity"][0]
     neff = sw.data["neff"][0]
     found = {nm for nm, g in zip(names, guided) if g}
     missing = [t for t in targets if t not in found]
-    deep_guided = []                                          # missing targets whose sector may hold more modes
+    deep_guided, collided = [], []
     for t in missing:
         sel = (parity == target_sector(t)) if C.USE_PARITY else np.ones(len(neff), bool)
-        if sel.any() and guided[sel][np.argmin(neff[sel])]:
+        if not (sel.any() and guided[sel][np.argmin(neff[sel])]):
+            continue                                          # sector's deepest mode is cut off
+        js = [j for j in np.flatnonzero(sel) if guided[j]]
+        sec_names = [names[j] for j in js]
+        if len(set(sec_names)) < len(sec_names) or any(HYBRID[0] < te[j] < HYBRID[1] for j in js):
+            collided.append(t)
+        else:
             deep_guided.append(t)
-    return labs, missing, deep_guided
+    return labs, missing, deep_guided, collided
+
+
+def _trim_warm(warm, n):
+    """Warm-start state of the n highest modes per sector (when going back to fewer modes)."""
+    return {p: (om, list(k)[:n], list(ev)[:n], list(ng)[:n]) for p, (om, k, ev, ng) in warm.items()}
 
 
 def run_unit(unit, plan, work):
@@ -391,7 +411,8 @@ def run_unit(unit, plan, work):
         done = _existing_ok(path, plan, c) if os.path.exists(path) else None
         if done:
             warm = None                                       # chain broken: the next solve starts cold
-            nev = max(nev, int(done.get("nev_per_sector") or nev))   # keep a raise made before a restart
+            # keep a raise made before a restart (nev_next: files written before it existed lack it)
+            nev = max(nev, int(done.get("nev_next", done.get("nev_per_sector")) or nev))
             continue
         try:                                                  # one failing λ must not stop the rest of the unit
             nev = _solve_one(lam, path, c, g, plan, diel, settings, nev, nev_max, store, warm, notes, timing)
@@ -408,21 +429,35 @@ def run_unit(unit, plan, work):
 
 def _solve_one(lam, path, c, g, plan, diel, settings, nev, nev_max, store, warm, notes, timing):
     """Solve, label, (maybe re-solve with more modes), save one λ. Returns the nev to use next; the
-    warm-start state is left in _W['warm_out']."""
+    warm-start state is left in _W['warm_out'].
+
+    A missing target is re-solved with nev_max modes only if it may sit below the last solved mode
+    (``deep``), not if its sector shows a label collision (``collided``: an anticrossing). If the
+    re-solve does not find it either, the next λ goes back to ``nev``."""
     M, np = _W["M"], _W["np"]
     if f"{lam:.4f}" in os.environ.get("RUN_GEOMETRY_TEST_FAIL", "").split(","):     # test hook only
         raise RuntimeError(f"test failure injected at λ = {lam}")
     t0 = time.perf_counter()
     sw, warm_new = M.solve_wavelength(diel, lam, settings(nev), warm=warm)
-    labs, missing, deep = _labels_and_missing(sw, c["targets"])
-    escalated = False
+    labs, missing, deep, collided = _labels_and_missing(sw, c["targets"])
+    if collided:
+        notes.append(f"{c['name']} λ={lam:.3f}: {', '.join(collided)} not labelled; its sector has a "
+                     f"duplicate or hybrid label (anticrossing?) -> not re-solved")
+    escalated, nev_next = False, nev
     if deep and nev < nev_max:                            # a target may sit below the last solved mode
-        nev = nev_max
         escalated = True
-        notes.append(f"{c['name']} λ={lam:.3f}: {', '.join(deep)} not found among the guided modes "
-                     f"-> nev raised to {nev} per sector for λ <= {lam:.3f} in this unit")
-        sw, warm_new = M.solve_wavelength(diel, lam, settings(nev), warm=None)
-        labs, missing, deep = _labels_and_missing(sw, c["targets"])
+        sw, warm_new = M.solve_wavelength(diel, lam, settings(nev_max), warm=None)
+        labs, missing, _, _ = _labels_and_missing(sw, c["targets"])
+        still = [t for t in deep if t in missing]
+        if still:                                         # more modes did not reveal it: go back
+            warm_new = _trim_warm(warm_new, nev)
+            notes.append(f"{c['name']} λ={lam:.3f}: {', '.join(still)} still missing with nev {nev_max} "
+                         f"per sector -> back to nev {nev} for the next λ")
+        else:                                             # it was below the cut: keep the extra modes
+            nev_next = nev_max
+            notes.append(f"{c['name']} λ={lam:.3f}: {', '.join(deep)} found with nev {nev_max} per sector "
+                         f"-> kept for λ <= {lam:.3f} in this unit")
+        nev = nev_max                                     # what THIS λ was solved with (metadata)
     _W["warm_out"] = warm_new
     sw.data["hg_pol"] = np.array([[p for p, _, _ in labs]])
     sw.data["hg_m"] = np.array([[m for _, m, _ in labs]])
@@ -430,7 +465,8 @@ def _solve_one(lam, path, c, g, plan, diel, settings, nev, nev_max, store, warm,
     sw.data["hg_err"] = np.full((1, len(labs)), np.nan)
     sw.meta.update(geometry_name=plan["name"], chunk=c["name"], align_frac=plan["align_frac"],
                    mpbx_commit=plan.get("mpbx_commit"),
-                   nev_per_sector=nev, nev_escalated=escalated, missing_targets=missing,
+                   nev_per_sector=nev, nev_next=nev_next, nev_escalated=escalated, missing_targets=missing,
+                   collided_targets=collided,
                    label_method="node count of the dominant transverse E component",
                    cores=list(_W["cores"]), peak_rss_gb=_peak_rss_gb())
     if not store:
@@ -443,7 +479,7 @@ def _solve_one(lam, path, c, g, plan, diel, settings, nev, nev_max, store, warm,
                                  Nx=g["Nx"], Ny=g["Ny"], nev=nev, escalated=escalated,
                                  converged=bool(sw.data["converged"].all()), cores=len(_W["cores"]),
                                  peak_rss_gb=_peak_rss_gb())) + "\n")
-    return nev
+    return nev_next
 
 
 def _existing_ok(path, plan, c):

@@ -51,8 +51,10 @@ USE_PARITY = True       # solve the two x-mirror sectors separately (README §2.
                         # where they cross).
 ALIGN_FRAC = 1 / 3      # LN/substrate interface 1/3 pixel above a pixel centre (README §2.2)
 NEV_EXTRA = 2           # if a target mode is missing at some λ while the deepest solved mode of
-                        # its sector is still guided, re-solve that λ (and the rest of that work
-                        # unit) with nev + NEV_EXTRA per sector. 0 = never.
+                        # its sector is still guided, re-solve that λ with nev + NEV_EXTRA per
+                        # sector, and keep that for the rest of the work unit if it found the
+                        # target. Skipped when the sector shows an anticrossing (duplicate or
+                        # hybrid label: the target is there, mislabelled). 0 = never.
 MIN_MARGIN = 1.4        # the window must leave >= MIN_MARGIN·λ_max of cladding on every side of
                         # the ridge base / film (else it is enlarged). 1.4 matches the window
                         # study: it keeps the window error of n_g below ~1e-5 except for modes
