@@ -1,0 +1,46 @@
+node d-3-5-3, nproc 1
+Architecture:        x86_64
+CPU op-mode(s):      32-bit, 64-bit
+Address sizes:       46 bits physical, 48 bits virtual
+Byte Order:          Little Endian
+CPU(s):              96
+On-line CPU(s) list: 0-95
+Vendor ID:           GenuineIntel
+Model name:          Intel(R) Xeon(R) Platinum 8260 CPU @ 2.40GHz
+CPU family:          6
+Model:               85
+Thread(s) per core:  2
+Core(s) per socket:  24
+Socket(s):           2
+Stepping:            7
+BogoMIPS:            4800.00
+Flags:               fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cdp_l3 invpcid_single intel_ppin ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm mpx rdt_a avx512f avx512dq rdseed adx smap clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts pku ospke avx512_vnni md_clear flush_l1d arch_capabilities ibpb_exit_to_user
+Virtualization:      VT-x
+L1d cache:           1.5 MiB (48 instances)
+L1i cache:           1.5 MiB (48 instances)
+L2 cache:            48 MiB (48 instances)
+L3 cache:            71.5 MiB (2 instances)
+NUMA node(s):        2
+NUMA node0 CPU(s):   0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94
+NUMA node1 CPU(s):   1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49,51,53,55,57,59,61,63,65,67,69,71,73,75,77,79,81,83,85,87,89,91,93,95
+[bench] 96 CPUs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95]
+1 proc x 1 cores         0.456 s/iter per process   speed-up  1.00 (efficiency 100 %)   all processes:  1.00x one core   cpu/wall 1.0   peak mem 0.95 GB
+1 proc x 2 cores         0.462 s/iter per process   speed-up  0.99 (efficiency  49 %)   all processes:  0.99x one core   cpu/wall 1.2   peak mem 0.75 GB
+1 proc x 4 cores         0.354 s/iter per process   speed-up  1.29 (efficiency  32 %)   all processes:  1.29x one core   cpu/wall 2.0   peak mem 0.88 GB
+1 proc x 8 cores         0.302 s/iter per process   speed-up  1.51 (efficiency  19 %)   all processes:  1.51x one core   cpu/wall 2.8   peak mem 1.14 GB
+1 proc x 12 cores        0.285 s/iter per process   speed-up  1.60 (efficiency  13 %)   all processes:  1.60x one core   cpu/wall 3.2   peak mem 1.21 GB
+1 proc x 16 cores        0.275 s/iter per process   speed-up  1.66 (efficiency  10 %)   all processes:  1.66x one core   cpu/wall 3.6   peak mem 1.46 GB
+1 proc x 24 cores        0.271 s/iter per process   speed-up  1.68 (efficiency   7 %)   all processes:  1.68x one core   cpu/wall 4.0   peak mem 1.76 GB
+1 proc x 32 cores        0.269 s/iter per process   speed-up  1.69 (efficiency   5 %)   all processes:  1.69x one core   cpu/wall 4.4   peak mem 2.14 GB
+1 proc x 48 cores        0.274 s/iter per process   speed-up  1.67 (efficiency   3 %)   all processes:  1.67x one core   cpu/wall 4.9   peak mem 3.40 GB
+1 proc x 64 cores        0.286 s/iter per process   speed-up  1.59 (efficiency   2 %)   all processes:  1.59x one core   cpu/wall 6.9   peak mem 3.52 GB
+1 proc x 96 cores        0.289 s/iter per process   speed-up  1.58 (efficiency   2 %)   all processes:  1.58x one core   cpu/wall 9.2   peak mem 4.04 GB
+96 procs x 1 cores       2.531 s/iter per process   speed-up  0.18 (efficiency  18 %)   all processes: 17.29x one core   cpu/wall 1.0   peak mem 0.77 GB
+48 procs x 2 cores       1.882 s/iter per process   speed-up  0.24 (efficiency  12 %)   all processes: 11.64x one core   cpu/wall 1.3   peak mem 0.79 GB
+24 procs x 4 cores       1.097 s/iter per process   speed-up  0.42 (efficiency  10 %)   all processes: 10.00x one core   cpu/wall 1.7   peak mem 0.86 GB
+12 procs x 8 cores       0.614 s/iter per process   speed-up  0.74 (efficiency   9 %)   all processes:  8.90x one core   cpu/wall 2.2   peak mem 1.02 GB
+8 procs x 12 cores       0.482 s/iter per process   speed-up  0.95 (efficiency   8 %)   all processes:  7.57x one core   cpu/wall 2.6   peak mem 1.13 GB
+6 procs x 16 cores       0.423 s/iter per process   speed-up  1.08 (efficiency   7 %)   all processes:  6.47x one core   cpu/wall 2.9   peak mem 1.49 GB
+4 procs x 24 cores       0.373 s/iter per process   speed-up  1.22 (efficiency   5 %)   all processes:  4.88x one core   cpu/wall 3.4   peak mem 1.81 GB
+3 procs x 32 cores       0.343 s/iter per process   speed-up  1.33 (efficiency   4 %)   all processes:  3.99x one core   cpu/wall 4.0   peak mem 2.10 GB
+2 procs x 48 cores       0.333 s/iter per process   speed-up  1.37 (efficiency   3 %)   all processes:  2.74x one core   cpu/wall 4.7   peak mem 3.48 GB

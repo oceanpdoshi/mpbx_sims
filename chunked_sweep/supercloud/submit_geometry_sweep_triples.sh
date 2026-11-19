@@ -19,7 +19,7 @@ FIELDS=none             # all | none
 NODES=8                 # whole nodes (your allocation: 8 xeon-p8 nodes)
 NPPN=2                  # geometries solved at the same time on each node (1, 2, 4 ...)
 NTPP=24                 # cores per geometry; NPPN x NTPP must be <= 48
-CORES_PER_WORKER=2      # cores per mode-solver process inside a geometry
+CORES_PER_WORKER=1      # cores per mode-solver process inside a geometry
 OUT_ROOT=""             # empty = <repo>/outputs
 # ======================================================================
 
