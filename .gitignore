@@ -224,3 +224,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# GPU venv (gpu_sweep/supercloud/setup_env_gpu.sh)
+.venv-gpu
