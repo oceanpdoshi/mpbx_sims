@@ -17,7 +17,7 @@
 RUN_NAME="tfln_sweep"
 FIELDS=none             # all | none   (all: ~3 GB per geometry; check `LLquota` first)
 CPUS=24                 # cores per geometry (48 = full node; 24 = two per node; 16 = three per node)
-CORES_PER_WORKER=2      # cores per mode-solver process (README §3)
+CORES_PER_WORKER=1      # cores per mode-solver process (README §3)
 TIME=24:00:00           # time limit PER ARRAY TASK (one geometry at 24 cores: ~4-8 h estimated)
 MAX_TASKS=240           # at most this many array tasks; with more geometries a task solves several
 OUT_ROOT=""             # empty = <repo>/outputs ; e.g. /home/gridsan/groups/<group>/tfln_outputs

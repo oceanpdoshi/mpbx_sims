@@ -20,7 +20,7 @@ T_CLAD=inf              # inf = SiO2 everywhere above, 0 = air, else planar SiO2
 GEOM_NAME=""            # empty = built from the parameters (tLN400_etch400_w1800_sw73_cladSiO2)
 FIELDS=all              # all | none   (E fields: ~3 GB per geometry, README §5)
 CPUS=48                 # cores for this task (48 = one full node)
-CORES_PER_WORKER=2      # cores per mode-solver process (README §3; check with submit_benchmark.sh)
+CORES_PER_WORKER=1      # cores per mode-solver process (README §3; check with submit_benchmark.sh)
 TIME=24:00:00           # time limit (estimate ~2-4 h for the default chunks; max 96:00:00)
 OUT_ROOT=""             # empty = <repo>/outputs ; e.g. /home/gridsan/groups/<group>/tfln_outputs
 # ======================================================================
