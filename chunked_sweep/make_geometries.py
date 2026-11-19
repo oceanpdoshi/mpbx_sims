@@ -9,6 +9,7 @@ Units: µm and degrees. t_clad: inf = SiO2 everywhere above the film, 0 = air,
 import csv
 import itertools
 import math
+import numpy as np
 import sys
 
 import sweep_config as C
