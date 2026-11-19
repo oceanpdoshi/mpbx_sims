@@ -151,15 +151,22 @@ def _pick_n(L, d, odd):
     return n
 
 
+def film_dy(dy, geom):
+    """The pitch closest to ``dy`` that makes the LN film a whole number of pixels (README §2.2)."""
+    return geom.t_ln / max(1, round(geom.t_ln / dy))
+
+
 def chunk_grid(chunk, geom):
     """Pixel counts of a chunk for a geometry: the chunk's window rounded to FFT-friendly counts,
-    enlarged if it leaves less than MIN_MARGIN·λ_max of cladding beside / above / below the guide."""
+    enlarged if it leaves less than MIN_MARGIN·λ_max of cladding beside / above / below the guide.
+    With FIT_DY_TO_FILM, dy is the chunk's dy adjusted to fit the film (``film_dy``)."""
     margin = C.MIN_MARGIN * chunk.lam_max
     need_x = geom.w_base + 2 * margin
     need_y = geom.t_ln + 2 * margin
+    dy = film_dy(chunk.dy, geom) if C.FIT_DY_TO_FILM else chunk.dy
     out = {}
     for ax, L, d, need, odd in (("x", chunk.Lx, chunk.dx, need_x, C.USE_PARITY),
-                                ("y", chunk.Ly, chunk.dy, need_y, False)):
+                                ("y", chunk.Ly, dy, need_y, False)):
         n = _pick_n(L, d, odd)
         enlarged = n * d < need - 1e-9
         if enlarged:
@@ -169,14 +176,18 @@ def chunk_grid(chunk, geom):
     return out
 
 
-def layer_warnings(geom, chunk):
+def layer_warnings(geom, grid):
     """The film interfaces sit at the same sub-pixel position only if every horizontal layer is a
     whole number of pixels thick (README §2.2); otherwise the error is less regular (not larger
-    on average)."""
-    w = []
-    for name, t in (("t_ln", geom.t_ln), ("slab", geom.t_slab), ("t_clad", geom.t_clad)):
-        if 0 < t < math.inf and abs(t / chunk.dy - round(t / chunk.dy)) > 1e-6:
-            w.append(f"{chunk.name}: {name} = {t} µm is not a multiple of dy = {chunk.dy} µm")
+    on average). ``grid`` is a chunk_grid result. The cladding's top surface is only checked when
+    it lies inside the window."""
+    dy, w = grid["dy"], []
+    clad_in = geom.t_clad < math.inf and 0.5 * geom.t_ln + geom.t_clad < 0.5 * grid["Ly"]
+    for name, t, check in (("t_ln", geom.t_ln, True), ("slab", geom.t_slab, True),
+                           ("t_clad", geom.t_clad, clad_in)):
+        if check and 0 < t < math.inf and abs(t / dy - round(t / dy)) > 1e-6:
+            w.append(f"{name} = {t:.6g} µm is not a multiple of dy = {1e3 * dy:.3f} nm"
+                     + (" (cladding top surface: matters only where the mode reaches it)" if name == "t_clad" else ""))
     return w
 
 
@@ -217,6 +228,7 @@ def geometry_plan(entry, chunks, step, fields, only=None):
                 use_parity=C.USE_PARITY, align_frac=C.ALIGN_FRAC, k_tol=C.K_TOL, eig_tol=C.EIG_TOL,
                 nev_extra=C.NEV_EXTRA, min_margin=C.MIN_MARGIN, field_dtype=C.FIELD_DTYPE,
                 lams_subset=sorted(only) if only else None, chunks=[], warnings=[])
+    layer = {}                                                # message -> chunks it applies to
     for c in chunks:
         g = chunk_grid(c, geom)
         lams = chunk_lams(c, step)
@@ -228,7 +240,10 @@ def geometry_plan(entry, chunks, step, fields, only=None):
             if g[f"enlarged_{ax}"]:
                 plan["warnings"].append(f"{c.name}: window enlarged in {ax} to {g[f'L{ax}']:.3f} µm "
                                         f"(MIN_MARGIN = {C.MIN_MARGIN} x λ_max of cladding around the guide)")
-        plan["warnings"] += layer_warnings(geom, c)
+        for msg in layer_warnings(geom, g):
+            layer.setdefault(msg, []).append(c.name.split("_")[0])
+    plan["warnings"] += [f"{'all chunks' if len(n) == len(chunks) else ', '.join(n)}: {msg}"
+                         for msg, n in layer.items()]
     return plan
 
 
@@ -547,7 +562,7 @@ def print_plan(plan, units, n_workers, cpw):
     for c in plan["chunks"]:
         g, e = c["grid"], est[c["name"]]
         print(f"  {c['name']:15s} {len(c['lams']):3d} λ  {g['Nx']}x{g['Ny']} px = {g['Lx']:.3f} x {g['Ly']:.3f} µm "
-              f"(dx {1e3 * g['dx']:.1f}, dy {1e3 * g['dy']:.1f} nm)  nev {c['nev']}/sector  "
+              f"(dx {1e3 * g['dx']:.1f}, dy {1e3 * g['dy']:.2f} nm)  nev {c['nev']}/sector  "
               f"cost {e['cost'] / tot_cost:5.1%}  fields {_gb(e['field_bytes'])}  ~{_gb(e['mem'])}/worker")
     for w in plan["warnings"]:
         print(f"  WARNING {w}")

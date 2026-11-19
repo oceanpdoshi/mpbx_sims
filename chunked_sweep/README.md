@@ -117,6 +117,18 @@ dy = 12.5 nm everywhere, a film or slab whose thickness is a multiple of 12.5 nm
 at the same sub-pixel position in every chunk, which keeps C the same everywhere (the dry-run warns
 otherwise; the error then varies a bit from geometry to geometry, it does not blow up).
 
+A t_ln sweep in steps finer than a pixel (e.g. 390–410 nm in 2 nm steps) would move the film's top
+interface through every sub-pixel position, and C with it (≈ −1.5 … +0.7 µm⁻² TE, −2.7 … +1.3 TM
+between interface-on-centre and half-way), adding a ~1–3e-4 wiggle in n_eff with a 12.5 nm period
+in t_ln. That is why `FIT_DY_TO_FILM = True` (sweep_config.py) adjusts dy per geometry to the
+nearest pitch that makes t_ln a whole number of pixels: 390 nm → 31 px of 12.58 nm, 394 nm → 32 px
+of 12.31 nm, 410 nm → 33 px of 12.42 nm (400 nm stays 32 px of 12.5 nm). Both film interfaces then
+sit at 1/3 in every geometry, and the error is C·dy² with one C. Where the pixel count changes
+(here near 393.75 and 406.25 nm) dy jumps by ~3 %, which moves n_eff by only ~|C|·Δ(dy²) ≈ 1e-5.
+A slab (partial etch) is not fitted: it is still flagged if it is not a whole number of the fitted
+pixels. Nor is the top surface of a finite cladding (flagged only when it lies inside the window; it
+matters only as far as the mode reaches it).
+
 ### 2.3 Parity solve vs FFT-friendly sizes (`bench_parity.py`, `results/bench_parity.json`)
 
 Chunk A's grid, λ = 0.5 µm, 8 P-cores:

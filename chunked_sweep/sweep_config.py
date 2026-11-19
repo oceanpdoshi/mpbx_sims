@@ -50,6 +50,13 @@ USE_PARITY = True       # solve the two x-mirror sectors separately (README §2.
                         # with 2·nev modes (≈2x slower, and TE/TM modes of opposite parity can mix
                         # where they cross).
 ALIGN_FRAC = 1 / 3      # LN/substrate interface 1/3 pixel above a pixel centre (README §2.2)
+FIT_DY_TO_FILM = True   # per geometry, stretch / shrink each chunk's dy to the nearest pitch that
+                        # makes t_ln a whole number of pixels (0.394 µm at dy = 12.5 nm -> 32 px of
+                        # 12.31 nm). Both film interfaces then sit at ALIGN_FRAC in every geometry,
+                        # so the error varies smoothly across a t_ln sweep instead of wiggling with
+                        # a 12.5 nm period (README §2.2). No effect when t_ln is already a multiple
+                        # of dy. Changing it changes those geometries' grids, so they refuse to
+                        # resume a run started with the other setting. False: use the chunk's dy.
 NEV_EXTRA = 2           # if a target mode is missing at some λ while the deepest solved mode of
                         # its sector is still guided, re-solve that λ with nev + NEV_EXTRA per
                         # sector, and keep that for the rest of the work unit if it found the

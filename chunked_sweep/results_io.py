@@ -424,7 +424,7 @@ def _write_summary(gdir, name, plan, meta, rows, lams, tracks, seams, recs, note
         mem = [recs[(c["name"], round(l, 6))][2].get("peak_rss_gb", np.nan) for l in c["lams"]
                if (c["name"], round(l, 6)) in recs]
         L.append(f"  {c['name']:15s} {c['lam_min']:.3f}-{c['lam_max']:.3f} µm  {g['Lx']:.3f} x {g['Ly']:.3f} µm  "
-                 f"{g['Nx']} x {g['Ny']} px (dx {1e3 * g['dx']:.1f}, dy {1e3 * g['dy']:.1f} nm)  nev {c['nev']}  "
+                 f"{g['Nx']} x {g['Ny']} px (dx {1e3 * g['dx']:.1f}, dy {1e3 * g['dy']:.2f} nm)  nev {c['nev']}  "
                  f"{len(ts)}/{len(c['lams'])} λ solved, median {np.nanmedian(ts) if ts else np.nan:.0f} s/λ, "
                  f"peak {np.nanmax(mem) if mem else np.nan:.2f} GB")
     for w in meta["warnings"]:
