@@ -14,9 +14,9 @@
 RUN_NAME="tfln_single"
 T_LN=0.400              # LN film thickness [µm]
 ETCH_DEPTH=0.400        # etch depth [µm] (= T_LN: fully etched)
-W_TOP=1.800             # ridge top width [µm]
+W_TOP=1.600             # ridge top width [µm]
 SIDEWALL_DEG=73         # sidewall angle from horizontal [deg]
-T_CLAD=inf              # inf = SiO2 everywhere above, 0 = air, else planar SiO2 this far above the ridge top [µm]
+T_CLAD=1.350            # inf = SiO2 everywhere above, 0 = air, else planar SiO2 this far above the ridge top [µm]
 GEOM_NAME=""            # empty = built from the parameters (tLN400_etch400_w1800_sw73_cladSiO2)
 FIELDS=all              # all | none   (E fields: ~3 GB per geometry, README §5)
 CPUS=48                 # cores for this task (48 = one full node)
