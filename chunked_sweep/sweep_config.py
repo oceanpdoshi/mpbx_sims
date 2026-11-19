@@ -30,11 +30,11 @@ class Chunk:
 # set mostly by dy, so a coarser dy at long λ would add up to ~5e-4 (n_eff) / ~8e-4 (n_g) and a
 # visible step at every chunk boundary; coarsening only dx costs ~25 % more in total.
 CHUNKS = (
-    Chunk("A_0400-0600nm", 0.40, 0.60, Lx=4.0, Ly=4.0, dx=0.0125, dy=0.0125, nev=6),
-    Chunk("B_0600-1000nm", 0.60, 1.00, Lx=5.0, Ly=5.0, dx=0.0125, dy=0.0125, nev=5),
-    Chunk("C_1000-1300nm", 1.00, 1.30, Lx=6.0, Ly=6.0, dx=0.020, dy=0.0125, nev=4, targets=LOW_TARGETS),
-    Chunk("D_1300-1700nm", 1.30, 1.70, Lx=7.0, Ly=7.0, dx=0.025, dy=0.0125, nev=3, targets=LOW_TARGETS),
-    Chunk("E_1700-2000nm", 1.70, 2.00, Lx=8.0, Ly=8.0, dx=0.025, dy=0.0125, nev=3, targets=LOW_TARGETS),
+    Chunk("A_0400-0600nm", 0.40, 0.60, Lx=4.0,  Ly=3.0, dx=0.0125, dy=0.0125, nev=6),
+    Chunk("B_0600-1000nm", 0.60, 1.00, Lx=5.0,  Ly=4.0, dx=0.0125, dy=0.0125, nev=5),
+    Chunk("C_1000-1300nm", 1.00, 1.30, Lx=7.0,  Ly=7.0, dx=0.020,  dy=0.0125, nev=4, targets=LOW_TARGETS),
+    Chunk("D_1300-1700nm", 1.30, 1.70, Lx=9.0,  Ly=8.0, dx=0.025,  dy=0.0125, nev=3, targets=LOW_TARGETS),
+    Chunk("E_1700-2000nm", 1.70, 2.00, Lx=10.0, Ly=9.0, dx=0.025,  dy=0.0125, nev=3, targets=LOW_TARGETS),
 )
 # Your original proposal (dy = dx in every chunk) — ~20 % cheaper, ~2-4x larger error above 1 µm.
 # To use it, replace the last three lines above with:
