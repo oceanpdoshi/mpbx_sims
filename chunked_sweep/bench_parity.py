@@ -60,7 +60,7 @@ def main():
         import psutil
         psutil.Process().cpu_affinity(cores)
 
-    sys.path[:0] = [ROOT, os.path.join(ROOT, "handoff_tfln_modesolve")]
+    sys.path[:0] = [ROOT]
     from utils.setup_jax import setup_jax
     setup_jax("cpu", verbose=False)
     import jax
@@ -68,7 +68,7 @@ def main():
     import numpy as np
     from mpbjax import grid_2d
     from geometry_gen import tfln_rib as R
-    import tfln_modes as M
+    import sim_core.tfln_modes as M
 
     out_path = os.path.join(HERE, "results", "bench_parity.json")
     res = json.load(open(out_path)) if os.path.exists(out_path) else {}

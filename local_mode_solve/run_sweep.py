@@ -32,8 +32,8 @@ try:
 except NameError:                                   # interactive kernel: no __file__, start from the cwd
     START = os.getcwd()
 ROOT = _find_root(START)                            # utils/, geometry_gen/
-HERE = os.path.join(ROOT, "handoff_tfln_modesolve") # tfln_modes.py, tfln_plots.py; results/ go here
-assert os.path.isfile(os.path.join(HERE, "tfln_modes.py")), f"tfln_modes.py not found in {HERE}"
+HERE = os.path.join(ROOT, "local_mode_solve")       # results/ go here
+assert os.path.isfile(os.path.join(ROOT, "sim_core", "tfln_modes.py")), f"sim_core/tfln_modes.py not found in {ROOT}"
 for p in (HERE, ROOT):                              # re-running the cell does not stack duplicates
     if p not in sys.path:
         sys.path.insert(0, p)

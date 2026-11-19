@@ -28,10 +28,10 @@ new_run_dir() {
 # `git pull` while a job waits in the queue (or before a resubmission) cannot change the run.
 snapshot_code() {
     local d="$1/code"
-    mkdir -p "$d/chunked_sweep/supercloud" "$d/handoff_tfln_modesolve" "$d/geometry_gen" "$d/utils"
+    mkdir -p "$d/chunked_sweep/supercloud" "$d/sim_core" "$d/geometry_gen" "$d/utils"
     cp "$REPO"/chunked_sweep/*.py "$d/chunked_sweep/"
     cp "$SC_DIR"/*.sh "$SC_DIR"/*.sbatch "$d/chunked_sweep/supercloud/"
-    cp "$REPO/handoff_tfln_modesolve/tfln_modes.py" "$REPO/handoff_tfln_modesolve/tfln_plots.py" "$d/handoff_tfln_modesolve/"
+    cp "$REPO"/sim_core/*.py "$d/sim_core/"
     cp "$REPO"/geometry_gen/*.py "$d/geometry_gen/"
     cp "$REPO"/utils/*.py "$d/utils/"
     # version of the copied code (results_io.code_version reads the first line)

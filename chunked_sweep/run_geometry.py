@@ -55,7 +55,7 @@ from concurrent.futures.process import BrokenProcessPool
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-PATHS = [HERE, ROOT, os.path.join(ROOT, "handoff_tfln_modesolve")]
+PATHS = [HERE, ROOT]                                      # ROOT: sim_core/, geometry_gen/, utils/
 sys.path[:0] = [p for p in PATHS if p not in sys.path]
 # SuperCloud's shared file system has no file locking; HDF5 refuses to write there without this
 # (workers inherit it). Set before h5py is imported anywhere.
@@ -298,7 +298,7 @@ def _init_worker(core_queue):
     import jax
     import numpy as np
     from geometry_gen import tfln_rib as R
-    import tfln_modes as M
+    import sim_core.tfln_modes as M
     _W.update(cores=cores, R=R, M=M, np=np, jax=jax, grid_key=None, diel_key=None, diel=None)
 
 

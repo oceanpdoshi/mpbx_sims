@@ -6,7 +6,7 @@ processes solves the wavelengths in parallel, and each geometry ends up as a han
 (no per-wavelength file clutter). Multi-geometry sweeps are one Slurm job array (or one LLsub
 "triples" job) with one or more geometries per array task.
 
-`handoff_tfln_modesolve/` is used as it is: its `tfln_modes.py` solver and `geometry_gen/tfln_rib.py`
+`sim_core/` is used as it is: its `tfln_modes.py` solver and `geometry_gen/tfln_rib.py`
 geometry are imported by this folder's code. Numbers below are for the reference geometry (400 nm
 film, fully etched, 1.8 µm top width, 73° sidewalls, fully SiO2-clad) on the i7-12700 desktop unless
 stated otherwise.

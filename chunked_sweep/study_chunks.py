@@ -1,5 +1,5 @@
 """Measurements behind the chunked-sweep recommendation (README.md in this folder).
-Nothing in handoff_tfln_modesolve/ is modified; its solver (tfln_modes) and the geometry
+Nothing in sim_core/ is modified; its solver (sim_core/tfln_modes) and the geometry
 (geometry_gen/tfln_rib) are reused as they are.
 
     python study_chunks.py census            mode ordering / nev needed vs λ (coarse grid)
@@ -18,7 +18,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-sys.path[:0] = [ROOT, os.path.join(ROOT, "handoff_tfln_modesolve")]
+sys.path[:0] = [ROOT]
 from utils.setup_jax import setup_jax  # noqa: E402
 
 setup_jax("cpu")
@@ -26,7 +26,7 @@ setup_jax("cpu")
 import numpy as np  # noqa: E402
 
 from geometry_gen import tfln_rib as R  # noqa: E402
-import tfln_modes as M  # noqa: E402
+import sim_core.tfln_modes as M  # noqa: E402
 
 GEOM = R.RibGeometry(t_ln=0.400, etch_depth=0.400, w_top=1.800, sidewall_deg=73.0, t_clad=np.inf)
 TARGETS = ("TE00", "TE10", "TE20", "TE30", "TM00", "TM10", "TM20", "TM30")

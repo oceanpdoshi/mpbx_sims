@@ -43,14 +43,14 @@ def pin(cores):
 
 def worker(cores, iters):
     pin(cores)
-    sys.path[:0] = [ROOT, os.path.join(ROOT, "handoff_tfln_modesolve")]
+    sys.path[:0] = [ROOT]
     from utils.setup_jax import setup_jax
     setup_jax("cpu", verbose=False)
     import jax
     import jax.numpy as jnp
     from mpbjax import grid_2d
     from geometry_gen import tfln_rib as R
-    import tfln_modes as M
+    import sim_core.tfln_modes as M
 
     small = os.environ.get("BENCH_SMOKE")
     Nx, Ny, d = (91, 64, 0.05) if small else (351, 256, 0.0125)

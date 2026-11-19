@@ -88,12 +88,12 @@ export MPLCONFIGDIR="$LOCAL/matplotlib"
 "$PY" - <<'EOF'
 import os, sys
 root = os.getcwd()
-sys.path[:0] = [root, os.path.join(root, "handoff_tfln_modesolve"), os.path.join(root, "chunked_sweep")]
+sys.path[:0] = [root, os.path.join(root, "chunked_sweep")]
 from utils.setup_jax import setup_jax
 setup_jax("cpu")
 import h5py, numpy as np, jax, pandas, matplotlib
 from geometry_gen import tfln_rib
-import tfln_modes, run_geometry, results_io
+import sim_core.tfln_modes, sim_core.tfln_plots, run_geometry, results_io
 print("python", sys.version.split()[0], "| jax", jax.__version__, "| numpy", np.__version__, "| h5py", h5py.__version__,
       "| pandas", pandas.__version__)
 EOF
