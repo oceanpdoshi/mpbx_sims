@@ -39,7 +39,16 @@ if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
 fi
 
 cd "$RUN_DIR"
-"$PY" -u "$RUN_DIR/code/$SCRIPT" "${TASK_ARGS[@]}" "$@"
+# srun runs the script as a job step bound to the job's CPUs, as in the CPU sweep's job script. Without
+# it the batch step had ONE usable CPU on SuperCloud (first GPU job, 2026-11-20: SLURM_CPUS_PER_TASK=20,
+# nproc 1), so every worker process would share that core. A step gets all of the job's GPUs unless it
+# asks for fewer; the line printed inside the step shows both (nproc should equal the CPUs requested).
+LAUNCH=()
+if command -v srun >/dev/null 2>&1; then
+    LAUNCH=(srun --ntasks=1 --cpus-per-task="${SLURM_CPUS_PER_TASK:-1}" --cpu-bind=cores)
+fi
+"${LAUNCH[@]}" bash -c 'echo "    in the job step: nproc $(nproc)  CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"; exec "$@"' \
+    step "$PY" -u "$RUN_DIR/code/$SCRIPT" "${TASK_ARGS[@]}" "$@"
 status=$?
 echo "=== $(date '+%F %T')  exit status $status"
 exit $status

@@ -3,6 +3,8 @@
 # one solver process per GPU. Run from anywhere on a SuperCloud LOGIN node:
 #
 #   bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --check      ~10 min: driver + GPU vs CPU numbers (do this first)
+#   bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --diag       ~10-20 min: where LOBPCG loses convergence on the GPU
+#                                                                        (diag_lobpcg_gpu.py; run it if --check fails)
 #   bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --test       ~10-20 min: the whole pipeline on tiny grids
 #   bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --dry-run    grids, batch sizes, work units; submits nothing
 #   bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh              submit (edit the settings below first)
@@ -38,24 +40,30 @@ while [ $# -gt 0 ]; do
         --dry-run) MODE=dry; shift ;;
         --test) MODE=test; shift ;;
         --check) MODE=check; shift ;;
+        --diag) MODE=diag; shift ;;
         --resume) RESUME="$2"; shift 2 ;;
         *) echo "unknown option $1"; exit 1 ;;
     esac
 done
 if [ -n "$RESUME" ] && [ "$MODE" != submit ]; then
-    echo "ERROR: --resume cannot be combined with --dry-run, --test or --check"
+    echo "ERROR: --resume cannot be combined with --dry-run, --test, --check or --diag"
     exit 1
 fi
 check_env_gpu
 
-if [ "$MODE" = check ]; then                              # one GPU, no run folder of results
-    RUN_DIR="$(new_run_dir "$OUT_ROOT" "gpu_check")"
+if [ "$MODE" = check ] || [ "$MODE" = diag ]; then        # one GPU, no run folder of results
+    if [ "$MODE" = check ]; then
+        JNAME=gpu_check; SCRIPT=gpu_sweep/check_gpu_local.py; LOOK="look for 'ALL CHECKS PASSED'"
+    else
+        JNAME=gpu_diag; SCRIPT=gpu_sweep/diag_lobpcg_gpu.py; LOOK="read the VERDICT at the end"
+    fi
+    RUN_DIR="$(new_run_dir "$OUT_ROOT" "$JNAME")"
     snapshot_code_gpu "$RUN_DIR"
-    write_run_info "$RUN_DIR" "submit    submit_single_geometry_gpu.sh --check"
-    JOBID=$(sbatch --parsable -J gpu_check $(gpu_request 1) --time=00:30:00 -o "$RUN_DIR/logs/%x_%j.out" \
-            "$RUN_DIR/code/gpu_sweep/supercloud/job_gpu.sbatch" "$RUN_DIR" "$PY" gpu_sweep/check_gpu_local.py --platform cuda)
+    write_run_info "$RUN_DIR" "submit    submit_single_geometry_gpu.sh --$MODE"
+    JOBID=$(sbatch --parsable -J "$JNAME" $(gpu_request 1) --time=01:00:00 -o "$RUN_DIR/logs/%x_%j.out" \
+            "$RUN_DIR/code/gpu_sweep/supercloud/job_gpu.sbatch" "$RUN_DIR" "$PY" "$SCRIPT" --platform cuda)
     echo "job $JOBID" >> "$RUN_DIR/run_info.txt"
-    echo "submitted check job $JOBID -> $RUN_DIR/logs/gpu_check_$JOBID.out  (look for 'ALL CHECKS PASSED')"
+    echo "submitted $MODE job $JOBID -> $RUN_DIR/logs/${JNAME}_$JOBID.out  ($LOOK)"
     exit 0
 fi
 

@@ -72,30 +72,51 @@ def main():
             ref.append((sw, RG.node_labels(sw.E[0], sw.data["te_frac"][0])))
         t_ref = time.perf_counter() - t0
 
+    print(f"reference: {len(lams)} wavelengths in {t_ref:.1f} s; LOBPCG iterations per λ "
+          f"{[int(sr.data['lobpcg_iters'].sum()) for sr, _ in ref]}", flush=True)
+
     # ---- batched path ----------------------------------------------------------------------
     def batched(eigh):
+        """The warm-start chain on the batched path. Stops after a wavelength in which any LOBPCG solve
+        ran to its iteration cap: that is a convergence failure, and the remaining solves would only
+        grind on at maxiter (first V100 run: 1000 iterations per solve, the job hit its time limit)."""
         BM.set_eigh(eigh)
         jax.clear_caches()                                    # retrace with this eigensolver
         ctx = BM.GridContext(entry["geometry"], g, C.ALIGN_FRAC, True, C.K_TOL, C.EIG_TOL, C.FIELD_DTYPE,
                              headroom_gb=0.0)
-        got, warm = [], None
+        got, warm, capped = [], None, False
         t0 = time.perf_counter()
-        for lam in lams:
+        for lam, (sr, _) in zip(lams, ref):
+            t1 = time.perf_counter()
             ld = ctx.lam_data(lam)
             res, stats = ctx.solve_slots([BM.Slot(ld, s, (warm or {}).get(s)) for s in ctx.sectors], nev)
             sw, labs, warm, _ = ctx.build_sweep(ld, res, nev, 0.0)
             got.append((sw, labs, stats))
-        print(f"reference {t_ref:.1f} s, batched path (LOBPCG eigh '{eigh}') {time.perf_counter() - t0:.1f} s "
-              f"(incl. compiles)")
-        return ctx, got
+            its = sw.data["lobpcg_iters"][0]
+            n_cap = int(np.sum(its >= ctx.maxiter))
+            same_n = sr.n_modes == sw.n_modes
+            dn = np.max(np.abs(sr.data["neff"][0] - sw.data["neff"][0])) if same_n else float("nan")
+            print(f"  eigh '{eigh}', λ = {lam:.3f}: {time.perf_counter() - t1:.1f} s, LOBPCG iterations "
+                  f"{int(its.sum())} (CPU {int(sr.data['lobpcg_iters'].sum())}), max |Δn_eff| vs CPU {dn:.2e}",
+                  flush=True)
+            if n_cap:
+                print(f"  eigh '{eigh}', λ = {lam:.3f}: {n_cap} of {len(its)} modes ran LOBPCG to its cap of "
+                      f"{ctx.maxiter} iterations without reaching the {C.EIG_TOL:g} residual: NOT CONVERGED "
+                      f"<-- FAIL (stopping this chain; see diag_lobpcg_gpu.py / the --diag job)", flush=True)
+                capped = True
+                break
+        print(f"batched path (LOBPCG eigh '{eigh}'): {time.perf_counter() - t0:.1f} s (incl. compiles)", flush=True)
+        return ctx, got, capped
 
-    if a.platform == "cuda":                                  # information: JAX's default small eigensolver
-        _, got_d = batched("default")                         # (cuSOLVER Jacobi) vs QR, iterations vs the CPU
-        for (sr, _), (sg, _, _) in zip(ref, got_d):
-            print(f"  eigh 'default', λ = {sr.lam[0]:.3f}: max |Δn_eff| "
-                  f"{np.max(np.abs(sr.data['neff'][0] - sg.data['neff'][0])) if sr.n_modes == sg.n_modes else float('nan'):.2e}"
-                  f"; LOBPCG iterations CPU {int(sr.data['lobpcg_iters'].sum())}, GPU {int(sg.data['lobpcg_iters'].sum())}")
-    ctx, got = batched("qr")                                  # gpu_config.GPU_EIGH: what production uses
+    def verdict(bad):
+        return "ALL CHECKS PASSED" if not bad else f"{bad} CHECK(S) FAILED"
+
+    prod = RGG.eigh_choice()                                  # gpu_config.GPU_EIGH: what production uses
+    ctx, got, capped = batched(prod)
+    if capped:
+        print(f"\nthe production eigensolver ('{prod}') does not converge here: the comparisons below are skipped")
+        print(f"\n{verdict(1)}")
+        sys.exit(1)
 
     bad = 0
     for (sr, lr), (sg, lg, stt) in zip(ref, got):
@@ -141,7 +162,13 @@ def main():
             flag = "" if dk <= TOL["neff"] and dng <= TOL["ng"] else "   <-- FAIL"
             bad += bool(flag)
             print(f"  λ {ld.lam:.3f} sector {alone[j]['sign']:+d}: max |Δn_eff| {dk:.2e}, |Δn_g| {dng:.2e}{flag}")
-    print(f"\n{'ALL CHECKS PASSED' if not bad else f'{bad} CHECK(S) FAILED'}")
+    print(f"\n{verdict(bad)}  (LOBPCG eigh '{prod}')", flush=True)
+
+    # ---- information only, after the verdict: JAX's default small eigensolver ---------------
+    if a.platform == "cuda" and prod != "default":            # (cuSOLVER Jacobi) vs the production choice
+        print("\ninformation only (not part of the verdict): the same chain with JAX's default small eigensolver")
+        batched("default")
+        print(f"\n{verdict(bad)}  (LOBPCG eigh '{prod}')")
     sys.exit(1 if bad else 0)
 
 

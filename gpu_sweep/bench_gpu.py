@@ -187,7 +187,7 @@ def main():
     ap.add_argument("--lanes-scan", default=None)
     ap.add_argument("--threshold", type=float, default=6.0)
     ap.add_argument("--max-slots", type=int, default=G.MAX_SLOTS_PER_CALL)
-    ap.add_argument("--eigh", choices=("qr", "default", "jacobi"), default=None)
+    ap.add_argument("--eigh", choices=("qr", "default", "jacobi", "host"), default=None)
     ap.add_argument("--platform", choices=("cuda", "cpu"), default="cuda")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")

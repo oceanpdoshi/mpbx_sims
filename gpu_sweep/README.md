@@ -39,7 +39,8 @@ python gpu_sweep/compare_runs.py outputs/tfln_single_2026-11-19-08-51/<geometry>
 | `compare_runs.py` | a CPU run against a GPU run of the same geometry: wall-time speed-up, busy-time speed-up, n_eff / n_g differences per mode |
 | `check_gpu_local.py` | the batched GPU path against `sim_core/tfln_modes.solve_wavelength` on a small grid (CPU backend, or GPU vs CPU) |
 | `supercloud/setup_env_gpu.sh` | one-time GPU venv (`.venv-gpu`) on a login node |
-| `supercloud/submit_single_geometry_gpu.sh` | one geometry on one GPU node (`--check`, `--test`, `--dry-run`, `--resume`) |
+| `supercloud/submit_single_geometry_gpu.sh` | one geometry on one GPU node (`--check`, `--diag`, `--test`, `--dry-run`, `--resume`) |
+| `diag_lobpcg_gpu.py` | why LOBPCG does not converge on the GPU: building blocks, small eigensolves, residual histories (`--diag`) |
 | `supercloud/submit_bench_gpu.sh` | the benchmark job (§3) |
 | `supercloud/submit_geometry_sweep_gpu.sh` | many geometries: a job array of whole GPU nodes, at most `MAX_NODES` at a time |
 | `supercloud/job_gpu.sbatch`, `common_env_gpu.sh`, `lib_submit_gpu.sh` | used by the submit scripts (they reuse `chunked_sweep/supercloud/`'s helpers) |
@@ -288,6 +289,7 @@ exact pins:
 
 ```bash
 bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --check   # 1 GPU, ~10 min
+bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --diag    # 1 GPU, ~10-20 min, if --check does not converge
 bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --test    # 2 GPUs, ~15 min
 ```
 
@@ -295,6 +297,13 @@ bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --test    # 2 GPUs, ~15 
   (`tfln_modes`, on the node's CPU) and with the batched path on the GPU, and compares every
   quantity. Look for `ALL CHECKS PASSED` in `outputs/gpu_check_<date>/logs/`. LOBPCG iteration
   counts may differ by a few: sums are ordered differently on the GPU.
+  The production eigensolver (`GPU_EIGH`) runs first and decides the verdict; a wavelength in
+  which any LOBPCG solve runs to its 1000-iteration cap stops the check with `NOT CONVERGED`.
+  JAX's default eigensolver is compared afterwards, for information only.
+* **`--diag`** (if `--check` fails to converge): `diag_lobpcg_gpu.py` takes one eigensolve apart:
+  FFT / operator / preconditioner on the GPU vs the CPU, cuSOLVER vs LAPACK on the real small
+  matrices of a GPU LOBPCG run, and the LOBPCG residual history with each small eigensolver,
+  including `"host"` (LAPACK through a host callback). Its `VERDICT` says which variant converges.
 * **`--test`** runs the whole pipeline (3 small chunks, 9 λ, both GPUs, merge) into
   `outputs/tfln_gpu_single_TEST_<date>/`.
 
@@ -380,10 +389,16 @@ In `_modes.h5` / `_summary.txt`, `solve_time` and "median s/λ" are those GPU-se
   path, orchestration, JAX/GPU specifics, scripts and benchmark logic). The confirmed defects are
   fixed. Among them were a batch-size cap that only ever shrank and a double solve after a nev
   escalation; the JAX/GPU part also prompted the eigensolver choice (§2.2).
+* **First SuperCloud run (2026-11-20, `--check` on one V100, driver 580):** `setup_env_gpu.sh`, the
+  `--gres` request and the driver check worked. **LOBPCG did not converge on the GPU:** with
+  `eigh "default"` every eigensolve ran to its 1000-iteration cap (CPU: ~50 per solve), n_eff came
+  out 2.5e-5 off, and the `"qr"` chain did not finish two wavelengths in 23 min (the CPU needs ~30 s);
+  the 30-min job hit its time limit. The batch step also had one usable CPU of the 20 requested
+  (`nproc 1`); `job_gpu.sbatch` now starts the script with `srun --cpu-bind=cores`. Next: `--diag`.
+  **Do not use the GPU sweep for results until `--check` passes.**
 * **Not run anywhere yet:**
-  * a real GPU: memory figures on the V100, cuFFT, compile times, speed;
-  * anything on SuperCloud: `setup_env_gpu.sh` (pip resolution of the CUDA wheels), the driver
-    version, the `--gres` request, the sbatch / array scripts.
+  * a converging GPU solve: memory figures on the V100, compile times, speed;
+  * the array scripts on SuperCloud.
 
   Run `--check`, `--test` and the benchmark, in that order, before a production run.
 * mpbx itself has never been validated on a GPU (its own docs say so). `--check` compares GPU and

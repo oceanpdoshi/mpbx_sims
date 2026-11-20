@@ -62,6 +62,32 @@ class _LinalgProxy:
         return w, v                                           # jnp.linalg.eigh's (eigenvalues, eigenvectors)
 
 
+def _host_eigh_np(a):
+    w, v = np.linalg.eigh(np.asarray(a))                      # LAPACK heevd, as on the CPU backend
+    return w, v
+
+
+class _HostLinalgProxy:
+    """jnp.linalg with eigh computed on the HOST (numpy / LAPACK) through jax.pure_callback: the
+    small Rayleigh-Ritz matrices are copied off the device and back (≤ 3·nev square, a few kB).
+    ``fn`` (numpy array -> (w, v)) replaces the LAPACK call (diag_lobpcg_gpu.py records with it)."""
+
+    def __init__(self, fn=None):
+        self._fn = fn or _host_eigh_np
+
+    def __getattr__(self, k):
+        return getattr(jnp.linalg, k)
+
+    def eigh(self, a, UPLO=None, symmetrize_input=True):
+        a = jnp.asarray(a)
+        if symmetrize_input:
+            a = 0.5 * (a + jnp.swapaxes(a, -1, -2).conj())
+        real = jnp.finfo(a.dtype).dtype
+        out = (jax.ShapeDtypeStruct(a.shape[:-1], real), jax.ShapeDtypeStruct(a.shape, a.dtype))
+        w, v = jax.pure_callback(self._fn, out, a, vmap_method="expand_dims")
+        return w, v
+
+
 class _JnpProxy:
     def __init__(self, linalg):
         self.linalg = linalg
@@ -78,9 +104,18 @@ def set_eigh(implementation):
     mpbjax's Rayleigh-Ritz step puts ~1e12 on the diagonal for null directions, so the small
     eigenvalues come out less exact and LOBPCG needs more iterations (estimated 1.3-1.8x).
     "qr": cuSOLVER's QR-based syevd (exact to rounding; one call per matrix of a batch).
-    On the CPU both are LAPACK heevd: no difference. Only mpbjax.eigensolver is affected. Call it
-    before anything is compiled (the workers do, at start-up)."""
+    "jacobi": cuSOLVER's syevj explicitly.
+    "host": LAPACK on the host CPU through jax.pure_callback (what the CPU backend computes; costs a
+    device <-> host copy of each small matrix, 3 per LOBPCG iteration). diag_lobpcg_gpu.py tests
+    whether this is what the GPU path needs to converge (first V100 run, 2026-11-20: with "default"
+    every eigensolve ran to maxiter without reaching the 1e-8 residual; "qr" did not finish the
+    same two wavelengths within 23 min, where the CPU needs ~30 s).
+    On the CPU the first three are LAPACK heevd: no difference. Only mpbjax.eigensolver is affected.
+    Call it before anything is compiled (the workers do, at start-up)."""
     import mpbjax.eigensolver as E
+    if implementation == "host":
+        E.jnp = _JnpProxy(_HostLinalgProxy())
+        return
     impl = {"default": None, "qr": jax.lax.linalg.EighImplementation.QR,
             "jacobi": jax.lax.linalg.EighImplementation.JACOBI}[implementation]
     E.jnp = jnp if impl is None else _JnpProxy(_LinalgProxy(impl))
