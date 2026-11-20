@@ -163,12 +163,6 @@ def main():
             bad += bool(flag)
             print(f"  λ {ld.lam:.3f} sector {alone[j]['sign']:+d}: max |Δn_eff| {dk:.2e}, |Δn_g| {dng:.2e}{flag}")
     print(f"\n{verdict(bad)}  (LOBPCG eigh '{prod}')", flush=True)
-
-    # ---- information only, after the verdict: JAX's default small eigensolver ---------------
-    if a.platform == "cuda" and prod != "default":            # (cuSOLVER Jacobi) vs the production choice
-        print("\ninformation only (not part of the verdict): the same chain with JAX's default small eigensolver")
-        batched("default")
-        print(f"\n{verdict(bad)}  (LOBPCG eigh '{prod}')")
     sys.exit(1 if bad else 0)
 
 

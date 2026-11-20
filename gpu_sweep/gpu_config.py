@@ -63,11 +63,12 @@ UNITS_PER_GPU = 5           # work units per GPU and geometry (more = better bal
 MAX_SLOTS_PER_CALL = None   # cap on sector solves per batched call (None = as many as fit; 1 = one at a
                             # time, no lockstep). bench_gpu.py --max-slots measures which is faster.
 
-# The small dense eigensolves inside LOBPCG (README §2.2): "qr" = cuSOLVER syevd. "default" lets JAX/
-# cuSOLVER choose, which for these small matrices is the Jacobi solver; its relative stopping test
-# combined with mpbx's 1e12 penalty for null directions costs extra LOBPCG iterations. No effect
-# on the CPU. Override per run with the environment variable GPU_SWEEP_EIGH.
-GPU_EIGH = "qr"
+# The small dense eigensolves inside LOBPCG (README §2.2): "host" = LAPACK on the CPU through a host
+# callback (the small matrices are copied off the GPU and back every iteration). cuSOLVER ("default",
+# "qr" = syevd, "jacobi") gets the eigenvalues of mpbx's penalized Rayleigh-Ritz matrices (1e12 on the
+# diagonal for null directions) wrong by ~2e-3 relative, and LOBPCG then never converges: --diag on a
+# V100, 2026-11-20 (README §6). No effect on the CPU backend. Override with GPU_SWEEP_EIGH.
+GPU_EIGH = "host"
 
 # ---------------------------------------------------------------------------------------
 # --test: tiny configuration (minutes, also on a laptop CPU) to check the whole pipeline. One grid

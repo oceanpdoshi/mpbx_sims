@@ -97,17 +97,17 @@ After the solve, the per-mode quantities are computed **on the GPU**: power norm
 fraction, edge fraction, HG00 overlap, and the two field lines whose sign changes give the
 node-count label. No field ever leaves the device.
 
-**One GPU-only setting: the small dense eigensolves inside LOBPCG** (Rayleigh-Ritz matrices,
-≤ 3·nev square). For such small matrices JAX lets cuSOLVER choose its Jacobi solver. Its stopping
-test is relative to the whole matrix norm, and mpbx's Rayleigh-Ritz step puts ~1e12 on the
-diagonal for null directions. Together these can cost LOBPCG extra iterations (estimated
-1.3–1.8×, not measured). The GPU workers therefore route these solves to cuSOLVER's QR-based
-`syevd` (`gpu_config.GPU_EIGH = "qr"`):
+**One GPU-only setting: the small dense eigensolves inside LOBPCG** (Gram and Rayleigh-Ritz
+matrices, ≤ 3·nev square). mpbx's Rayleigh-Ritz step puts ~1e12 on the diagonal for null
+directions. On a V100, cuSOLVER (`"default"` = its Jacobi solver, `"qr"` = `syevd`, `"jacobi"`)
+gets the small eigenvalues of these penalized matrices wrong by ~2e-3 relative, and LOBPCG then
+stalls at a residual of ~4e-5 and never converges (§6). The GPU workers therefore solve them with
+LAPACK on the host (`gpu_config.GPU_EIGH = "host"`): each iteration copies the small matrices
+(a few kB) off the GPU and back through `jax.pure_callback`.
 
 * Only `mpbjax.eigensolver`, inside the GPU processes, is affected; mpbx itself is unchanged.
-* On the CPU, both choices are the same LAPACK routine.
-* `--check` prints the LOBPCG iteration counts of both choices against the CPU's.
-* The benchmark times chunk A both ways (§3.3).
+* On the CPU backend, every choice is the same LAPACK routine.
+* `--diag` compares all four choices on the GPU (§4.2); `bench_gpu.py --eigh` selects one.
 
 **Checked on the desktop (CPU backend, `check_gpu_local.py`):** against
 `tfln_modes.solve_wavelength`, n_eff agrees to 3e-15, n_g to 2e-9, with the same labels, the same
@@ -239,8 +239,6 @@ measured apart and added to the projection once.
   * **Chunk D with `--max-slots 1`:** one sector solve per call, i.e. no lockstep. Compare its
     s/λ with GPU 1's D. Lockstep runs every slot of a call until the slowest converges; if
     one-at-a-time is faster, set `MAX_SLOTS_PER_CALL = 1` in `gpu_config.py`.
-  * **Chunk A with `--eigh default`:** JAX's own small eigensolver, against GPU 1's A, which uses
-    QR (§2.2). Keep whichever is faster.
 
 Read `logs/bench_gpu_grids.log` and `logs/bench_cpu_grids_and_scans.log`; the numbers are also in
 `bench*/*.json`.
@@ -299,7 +297,6 @@ bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh --test    # 2 GPUs, ~15 
   counts may differ by a few: sums are ordered differently on the GPU.
   The production eigensolver (`GPU_EIGH`) runs first and decides the verdict; a wavelength in
   which any LOBPCG solve runs to its 1000-iteration cap stops the check with `NOT CONVERGED`.
-  JAX's default eigensolver is compared afterwards, for information only.
 * **`--diag`** (if `--check` fails to converge): `diag_lobpcg_gpu.py` takes one eigensolve apart:
   FFT / operator / preconditioner on the GPU vs the CPU, cuSOLVER vs LAPACK on the real small
   matrices of a GPU LOBPCG run, and the LOBPCG residual history with each small eigensolver,
@@ -381,7 +378,7 @@ In `_modes.h5` / `_summary.txt`, `solve_time` and "median s/λ" are those GPU-se
   * a stub test of a lane escalating while another lane already runs at the raised nev (each
     wavelength solved once);
   * `bench_gpu.py` with `--grids cpu-run`, `--nev-scan`, `--lanes-scan`, `--max-slots 1` and
-    `--eigh default`;
+    `--eigh`;
   * `compare_runs.py`;
   * `--dry-run` of the production plan;
   * `bash -n` of every shell script and of the generated benchmark job.
@@ -393,8 +390,15 @@ In `_modes.h5` / `_summary.txt`, `solve_time` and "median s/λ" are those GPU-se
   `--gres` request and the driver check worked. **LOBPCG did not converge on the GPU:** with
   `eigh "default"` every eigensolve ran to its 1000-iteration cap (CPU: ~50 per solve), n_eff came
   out 2.5e-5 off, and the `"qr"` chain did not finish two wavelengths in 23 min (the CPU needs ~30 s);
-  the 30-min job hit its time limit. The batch step also had one usable CPU of the 20 requested
-  (`nproc 1`); `job_gpu.sbatch` now starts the script with `srun --cpu-bind=cores`. Next: `--diag`.
+  the 30-min job hit its time limit. (The log's `nproc 1` was not a binding problem: GNU `nproc`
+  reports `OMP_NUM_THREADS`, which `common_env.sh` sets to 1. The job log now prints the real
+  count. `job_gpu.sbatch` starts the script with `srun --cpu-bind=cores` anyway, as the CPU sweep does.)
+* **`--diag` on a V100 (2026-11-20):** FFT, operator, preconditioner and Gram products agree with
+  the CPU to ≤ 2e-15. The small eigensolves do not: on the recorded Rayleigh-Ritz matrices,
+  cuSOLVER's eigenvalues differ from LAPACK's by 2e-3 (`default`, `jacobi`) and 5e-3 (`qr`)
+  relative, while Gram matrices agree to 5e-14. LOBPCG with any cuSOLVER variant stalls at a
+  residual of 4e-5 (`qr`: 5e-4, then diverging); with `"host"` it converges in 72 iterations, as on
+  the CPU, with ω² equal to 2e-15. Production now uses `GPU_EIGH = "host"`. Next: `--check`.
   **Do not use the GPU sweep for results until `--check` passes.**
 * **Not run anywhere yet:**
   * a converging GPU solve: memory figures on the V100, compile times, speed;

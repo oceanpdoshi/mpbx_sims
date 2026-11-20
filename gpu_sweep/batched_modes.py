@@ -100,16 +100,15 @@ def set_eigh(implementation):
     """Which algorithm mpbjax's LOBPCG uses for its small (<= 3·nev square) Hermitian eigensolves.
 
     "default": jnp.linalg.eigh as shipped. On a GPU JAX then lets cuSOLVER pick, which for such small
-    matrices is the Jacobi solver (syevj). Its stopping test is relative to the whole matrix norm, and
-    mpbjax's Rayleigh-Ritz step puts ~1e12 on the diagonal for null directions, so the small
-    eigenvalues come out less exact and LOBPCG needs more iterations (estimated 1.3-1.8x).
-    "qr": cuSOLVER's QR-based syevd (exact to rounding; one call per matrix of a batch).
+    matrices is the Jacobi solver (syevj).
+    "qr": cuSOLVER's QR-based syevd (one call per matrix of a batch).
     "jacobi": cuSOLVER's syevj explicitly.
     "host": LAPACK on the host CPU through jax.pure_callback (what the CPU backend computes; costs a
-    device <-> host copy of each small matrix, 3 per LOBPCG iteration). diag_lobpcg_gpu.py tests
-    whether this is what the GPU path needs to converge (first V100 run, 2026-11-20: with "default"
-    every eigensolve ran to maxiter without reaching the 1e-8 residual; "qr" did not finish the
-    same two wavelengths within 23 min, where the CPU needs ~30 s).
+    device <-> host copy of each small matrix, 3 per LOBPCG iteration). THE ONE THAT WORKS ON A GPU:
+    mpbjax's Rayleigh-Ritz step puts ~1e12 on the diagonal for null directions, and on a V100 all
+    three cuSOLVER variants got the small eigenvalues of those matrices wrong by 2e-3 to 5e-3
+    relative; LOBPCG then stalled at a residual of ~4e-5 and never converged, while "host" converged
+    in the CPU's 72 iterations (diag_lobpcg_gpu.py, 2026-11-20).
     On the CPU the first three are LAPACK heevd: no difference. Only mpbjax.eigensolver is affected.
     Call it before anything is compiled (the workers do, at start-up)."""
     import mpbjax.eigensolver as E

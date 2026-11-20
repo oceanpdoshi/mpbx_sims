@@ -18,7 +18,10 @@ source /etc/profile                       # SuperCloud: initializes `module` etc
 source "$RUN_DIR/code/gpu_sweep/supercloud/common_env_gpu.sh"
 
 echo "=== $(date '+%F %T')  job ${SLURM_JOB_ID:-?}  array task ${SLURM_ARRAY_TASK_ID:-none}  node $(hostname)"
-echo "    SLURM_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-?}  nproc $(nproc)  CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+# CPUs this process may run on. Not plain `nproc`: GNU nproc reports OMP_NUM_THREADS, which
+# common_env.sh sets to 1 (one-thread BLAS pools), so it printed "nproc 1" whatever the binding.
+usable_cpus() { env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc; }
+echo "    SLURM_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-?}  usable CPUs $(usable_cpus)  CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 echo "    TMPDIR=${TMPDIR:-unset}  XLA_PYTHON_CLIENT_MEM_FRACTION=$XLA_PYTHON_CLIENT_MEM_FRACTION"
 if command -v nvidia-smi >/dev/null 2>&1; then
     nvidia-smi --query-gpu=index,name,memory.total,driver_version,compute_cap --format=csv 2>/dev/null \
@@ -39,16 +42,17 @@ if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
 fi
 
 cd "$RUN_DIR"
-# srun runs the script as a job step bound to the job's CPUs, as in the CPU sweep's job script. Without
-# it the batch step had ONE usable CPU on SuperCloud (first GPU job, 2026-11-20: SLURM_CPUS_PER_TASK=20,
-# nproc 1), so every worker process would share that core. A step gets all of the job's GPUs unless it
-# asks for fewer; the line printed inside the step shows both (nproc should equal the CPUs requested).
+# srun runs the script as a job step bound to the job's CPUs, as in the CPU sweep's job script. A step
+# gets all of the job's GPUs unless it asks for fewer (the --diag job of 2026-11-20 confirmed the GPU).
+# The line printed inside the step shows both; usable CPUs should equal the CPUs requested.
 LAUNCH=()
+STEP="no srun"
 if command -v srun >/dev/null 2>&1; then
     LAUNCH=(srun --ntasks=1 --cpus-per-task="${SLURM_CPUS_PER_TASK:-1}" --cpu-bind=cores)
+    STEP="srun step"
 fi
-"${LAUNCH[@]}" bash -c 'echo "    in the job step: nproc $(nproc)  CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"; exec "$@"' \
-    step "$PY" -u "$RUN_DIR/code/$SCRIPT" "${TASK_ARGS[@]}" "$@"
+"${LAUNCH[@]}" bash -c 'echo "    in the job ($0): usable CPUs $(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc)  CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"; exec "$@"' \
+    "$STEP" "$PY" -u "$RUN_DIR/code/$SCRIPT" "${TASK_ARGS[@]}" "$@"
 status=$?
 echo "=== $(date '+%F %T')  exit status $status"
 exit $status

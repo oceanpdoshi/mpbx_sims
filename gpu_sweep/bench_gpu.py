@@ -10,7 +10,7 @@ faster?" in ~1 h instead of a full run (README §3).
     --n-lam 3          wavelengths per lane (the first is solved cold, the rest warm-started)
     --chunks A,C       only these chunks (first letter or full name)
     --max-slots 1      one sector solve per call (no lockstep): compare with the default
-    --eigh default     LOBPCG's small eigensolves as JAX ships them (gpu_config.GPU_EIGH = "qr" otherwise)
+    --eigh default     LOBPCG's small eigensolves: default | qr | jacobi | host (else gpu_config.GPU_EIGH)
     --platform cpu     run on the CPU backend (to test this script; the timings are then meaningless)
 Every timed unit is preceded by an untimed warm-up with the same batch shape, so compiles and
 first-call costs stay out of the per-λ times; the projection adds the measured compile time once.
