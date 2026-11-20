@@ -7,6 +7,9 @@ Background: on the first V100 run (2026-11-20, `--check`), every LOBPCG eigensol
 path with JAX's default small eigensolver ran to its 1000-iteration cap without reaching the 1e-8
 residual (the CPU needs ~50), n_eff came out 2.5e-5 off, and the "qr" variant did not finish the
 same two wavelengths in 23 minutes. This script finds out where the GPU loses the convergence.
+(Its first GPU run found it: mpbjax's 1e12 penalty on null directions in the Rayleigh-Ritz step
+defeats cuSOLVER's norm-relative small eigensolvers. mpbjax now scales the penalty to the kept
+block (eigensolver._null_penalty); the header line "mpbjax RR penalty" says which one is installed.)
 
 Same geometry, grid (the --test grid, 105 x 120 px), wavelength and number of bands as --check, at
 ONE fixed k (the Newton starting value), ONE parity sector, cold start; no Newton iteration, no
@@ -16,7 +19,7 @@ batching (vmap), no post-processing. Three parts:
    preconditioner, a block Gram product, and the operator's Hermiticity on the GPU. All should
    agree to ~1e-15 relative; a much larger number points at the culprit.
 2. The small dense eigensolves inside LOBPCG, on the REAL matrices of a GPU run (recorded): the
-   whitening Gram matrices ZᴴZ and the Rayleigh-Ritz matrices (with mpbjax's 1e12 penalty on null
+   whitening Gram matrices ZᴴZ and the Rayleigh-Ritz matrices (with mpbjax's penalty on null
    directions). Each is solved by cuSOLVER ("default", "qr", "jacobi") and by LAPACK (reference).
 3. The residual history of the whole LOBPCG solve (the same lobpcg code; the LOBPCG cap is raised
    step by step: 1, 2, 5, ... iterations from the same start), for: LAPACK on the CPU backend, and
@@ -69,6 +72,7 @@ def main():
     cpu = jax.devices("cpu")[0]
     on_gpu = dev.platform != "cpu"
     print(f"device under test: {dev} ({dev.platform}); reference: {cpu}")
+    print(f"mpbjax RR penalty: {'scaled to the kept block (_null_penalty)' if hasattr(E, '_null_penalty') else '1e12 wall (old mpbjax: cuSOLVER will stall)'}")
     if on_gpu:
         print(f"  {getattr(dev, 'device_kind', '?')}")
 
@@ -265,8 +269,10 @@ def main():
         print("  the large-vector part (operator, preconditioner, projections). See part 1 and the residual")
         print("  floor above.")
     elif set(ok) >= {"default", "qr"}:
-        print("  At fixed k LOBPCG converges on the GPU with cuSOLVER: the failure in --check comes from the")
-        print("  batched path (vmap over slots, the Newton loop, warm starts), not from LOBPCG itself.")
+        print("  LOBPCG converges on the GPU with cuSOLVER too" + (" (mpbjax's scaled penalty)." if hasattr(E, "_null_penalty") else "."))
+        print("  gpu_config.GPU_EIGH may then be \"default\" or \"qr\" (no host round trips): set it, run --check,")
+        print("  and let the benchmark (bench_gpu.py --eigh) decide between them and \"host\" on speed.")
+        print("  If --check still fails, the cause is in the batched path (vmap, Newton loop, warm starts).")
     else:
         print(f"  Mixed: {ok} converge, {bad} do not. Use a converging variant for GPU_EIGH and re-run --check.")
     sys.exit(0 if (ok or not on_gpu) else 1)

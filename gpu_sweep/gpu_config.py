@@ -67,7 +67,10 @@ MAX_SLOTS_PER_CALL = None   # cap on sector solves per batched call (None = as m
 # callback (the small matrices are copied off the GPU and back every iteration). cuSOLVER ("default",
 # "qr" = syevd, "jacobi") gets the eigenvalues of mpbx's penalized Rayleigh-Ritz matrices (1e12 on the
 # diagonal for null directions) wrong by ~2e-3 relative, and LOBPCG then never converges: --diag on a
-# V100, 2026-11-20 (README §6). No effect on the CPU backend. Override with GPU_SWEEP_EIGH.
+# V100, 2026-11-20 (README §6). mpbjax now scales that penalty to the kept block (eigensolver.
+# _null_penalty), after which cuSOLVER is expected to converge too (emulated on the CPU, not yet on a
+# GPU): if --diag then shows "default" / "qr" converging, switch to the faster of them (bench).
+# No effect on the CPU backend. Override with GPU_SWEEP_EIGH.
 GPU_EIGH = "host"
 
 # ---------------------------------------------------------------------------------------

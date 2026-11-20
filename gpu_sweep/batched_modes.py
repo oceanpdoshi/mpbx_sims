@@ -108,7 +108,9 @@ def set_eigh(implementation):
     mpbjax's Rayleigh-Ritz step puts ~1e12 on the diagonal for null directions, and on a V100 all
     three cuSOLVER variants got the small eigenvalues of those matrices wrong by 2e-3 to 5e-3
     relative; LOBPCG then stalled at a residual of ~4e-5 and never converged, while "host" converged
-    in the CPU's 72 iterations (diag_lobpcg_gpu.py, 2026-11-20).
+    in the CPU's 72 iterations (diag_lobpcg_gpu.py, 2026-11-20). That was with mpbjax's old 1e12
+    penalty; with the penalty scaled to the kept block (mpbjax.eigensolver._null_penalty) the cuSOLVER
+    variants should converge as well (a norm-relative eigh emulated on the CPU does).
     On the CPU the first three are LAPACK heevd: no difference. Only mpbjax.eigensolver is affected.
     Call it before anything is compiled (the workers do, at start-up)."""
     import mpbjax.eigensolver as E
