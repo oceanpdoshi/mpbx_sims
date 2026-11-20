@@ -104,16 +104,20 @@ def set_eigh(implementation):
     "qr": cuSOLVER's QR-based syevd (one call per matrix of a batch).
     "jacobi": cuSOLVER's syevj explicitly.
     "host": LAPACK on the host CPU through jax.pure_callback (what the CPU backend computes; costs a
-    device <-> host copy of each small matrix, 3 per LOBPCG iteration). THE ONE THAT WORKS ON A GPU:
-    mpbjax's Rayleigh-Ritz step puts ~1e12 on the diagonal for null directions, and on a V100 all
-    three cuSOLVER variants got the small eigenvalues of those matrices wrong by 2e-3 to 5e-3
-    relative; LOBPCG then stalled at a residual of ~4e-5 and never converged, while "host" converged
-    in the CPU's 72 iterations (diag_lobpcg_gpu.py, 2026-11-20). That was with mpbjax's old 1e12
-    penalty; with the penalty scaled to the kept block (mpbjax.eigensolver._null_penalty) the cuSOLVER
-    variants should converge as well (a norm-relative eigh emulated on the CPU does).
+    device <-> host copy of each small matrix, 3 per LOBPCG iteration).
+    The cuSOLVER choices need mpbjax's scaled null-direction penalty (eigensolver._null_penalty). With
+    the old 1e12 penalty their norm-relative stopping / deflation tests ignored the couplings LOBPCG
+    needs near convergence, and every solve on a V100 stalled at a residual of ~4e-5 (only "host"
+    converged); with the scaled penalty all of them converge in the CPU's 72 iterations
+    (diag_lobpcg_gpu.py, 2026-11-20). A cuSOLVER choice with an old mpbjax on a GPU is refused.
     On the CPU the first three are LAPACK heevd: no difference. Only mpbjax.eigensolver is affected.
     Call it before anything is compiled (the workers do, at start-up)."""
     import mpbjax.eigensolver as E
+    if implementation != "host" and not hasattr(E, "_null_penalty") and jax.default_backend() != "cpu":
+        raise RuntimeError(
+            f"LOBPCG eigh '{implementation}' on a GPU needs mpbjax's scaled null-direction penalty "
+            f"(mpbjax.eigensolver._null_penalty), which {E.__file__} does not have: update mpbx, or set "
+            f"GPU_SWEEP_EIGH=host (gpu_sweep README §2.2)")
     if implementation == "host":
         E.jnp = _JnpProxy(_HostLinalgProxy())
         return

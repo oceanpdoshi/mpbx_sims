@@ -11,7 +11,8 @@
 #          2 GPUs, against the CPU run's wall time                    -> logs/bench_gpu_grids.log
 #   GPU 2: the CPU run's own grids (equal work, node vs node); nev scan at 1.5 µm (3, 4, 6 modes per
 #          sector); lanes scan (1, 2, 3 wavelengths per batch); chunk D one sector solve per call
-#          (no lockstep)
+#          (no lockstep); chunk A with the small eigensolves by cuSOLVER's syevd ("qr") and by LAPACK
+#          on the host ("host") instead of the production choice (gpu_config.GPU_EIGH)
 #                                                                     -> logs/bench_cpu_grids_and_scans.log
 # Results: <run>/bench*/bench_*.json. The job fails (sacct: FAILED) if any part failed.
 
@@ -63,6 +64,8 @@ P1=\$!
     BENCH --out "$RUN_DIR/bench" --grids gpu --nev-scan 3,4,6 --scan-lam 1.5 --n-lam $N_LAM $CPU_OPT || rc=1
     BENCH --out "$RUN_DIR/bench_lanes" --grids gpu --lanes-scan 1,2,3 --scan-lam 1.5 --n-lam $N_LAM $CPU_OPT || rc=1
     BENCH --out "$RUN_DIR/bench_slots1" --grids gpu --chunks D --max-slots 1 --n-lam $N_LAM $CPU_OPT || rc=1
+    BENCH --out "$RUN_DIR/bench_eigh_qr" --grids gpu --chunks A --eigh qr --n-lam $N_LAM $CPU_OPT || rc=1
+    BENCH --out "$RUN_DIR/bench_eigh_host" --grids gpu --chunks A --eigh host --n-lam $N_LAM $CPU_OPT || rc=1
     exit \$rc
 ) > "$RUN_DIR/logs/bench_cpu_grids_and_scans.log" 2>&1 &
 P2=\$!

@@ -98,24 +98,26 @@ fraction, edge fraction, HG00 overlap, and the two field lines whose sign change
 node-count label. No field ever leaves the device.
 
 **One GPU-only setting: the small dense eigensolves inside LOBPCG** (Gram and Rayleigh-Ritz
-matrices, ≤ 3·nev square). mpbx's Rayleigh-Ritz step puts ~1e12 on the diagonal for null
-directions. On a V100, cuSOLVER (`"default"` = its Jacobi solver, `"qr"` = `syevd`, `"jacobi"`)
-gets the small eigenvalues of these penalized matrices wrong by ~2e-3 relative, and LOBPCG then
-stalls at a residual of ~4e-5 and never converges (§6). The GPU workers therefore solve them with
-LAPACK on the host (`gpu_config.GPU_EIGH = "host"`): each iteration copies the small matrices
-(a few kB) off the GPU and back through `jax.pure_callback`.
+matrices, ≤ 3·nev square). mpbjax's Rayleigh-Ritz step pushes rank-deficient ("null") trial
+directions to the top of the spectrum with a diagonal penalty. **This needs mpbx with the scaled
+penalty** (`eigensolver._null_penalty`, 2026-11-20). The old penalty was a 1e12 wall: it made the
+small matrix's norm ~1e12× its Ritz values, and cuSOLVER's stopping / deflation tests are relative
+to that norm, so it ignored the small couplings LOBPCG needs near convergence; on a V100 every
+solve stalled at a residual of ~4e-5 (§6). The new penalty, 2·‖M‖_F, sits just above every kept
+Ritz value; on the CPU it changes nothing measurable.
 
-The cause is the size of the penalty, not cuSOLVER as such: a 1e12 wall makes the matrix norm
-~1e12× its Ritz values, and cuSOLVER's stopping / deflation tests are relative to that norm, so
-the small couplings LOBPCG needs near convergence are ignored. mpbjax now sets the penalty to
-2·‖M‖_F (`eigensolver._null_penalty`), just above every kept Ritz value. On the CPU this changes
-nothing measurable; with an emulated norm-relative `eigh` the old penalty stalls at 4e-5 (as on
-the V100) and the new one converges in the CPU's iteration count. Until `--diag` shows the same on
-a GPU, production keeps `"host"`; after that, `"default"` or `"qr"` saves the host round trips.
+`gpu_config.GPU_EIGH` picks the small eigensolver:
 
-* Only `mpbjax.eigensolver`, inside the GPU processes, is affected; mpbx itself is unchanged.
-* On the CPU backend, every choice is the same LAPACK routine.
-* `--diag` compares all four choices on the GPU (§4.2); `bench_gpu.py --eigh` selects one.
+* `"default"` (production): what JAX picks, cuSOLVER's batched Jacobi solver for these sizes.
+* `"qr"`: cuSOLVER's `syevd`. `"jacobi"`: `syevj` explicitly.
+* `"host"`: LAPACK on the CPU through `jax.pure_callback`; each iteration copies the small
+  matrices (a few kB) off the GPU and back. The only choice that works with an old mpbx.
+* On the V100 all four converge in the CPU's iteration count (`--diag`); the benchmark times
+  chunk A with `"qr"` and `"host"` against `"default"` (§3.3).
+* With an old mpbx, a cuSOLVER choice on a GPU stops the worker with an error (update mpbx, or
+  set `GPU_SWEEP_EIGH=host`).
+* Only `mpbjax.eigensolver` inside the GPU processes is switched; on the CPU backend every choice
+  is the same LAPACK routine.
 
 **Checked on the desktop (CPU backend, `check_gpu_local.py`):** against
 `tfln_modes.solve_wavelength`, n_eff agrees to 3e-15, n_g to 2e-9, with the same labels, the same
@@ -247,6 +249,8 @@ measured apart and added to the projection once.
   * **Chunk D with `--max-slots 1`:** one sector solve per call, i.e. no lockstep. Compare its
     s/λ with GPU 1's D. Lockstep runs every slot of a call until the slowest converges; if
     one-at-a-time is faster, set `MAX_SLOTS_PER_CALL = 1` in `gpu_config.py`.
+  * **Chunk A with `--eigh qr` and with `--eigh host`:** the other small eigensolvers (§2.2),
+    against GPU 1's A with `"default"`. If one is clearly faster, set `GPU_EIGH` to it.
 
 Read `logs/bench_gpu_grids.log` and `logs/bench_cpu_grids_and_scans.log`; the numbers are also in
 `bench*/*.json`.
@@ -406,14 +410,17 @@ In `_modes.h5` / `_summary.txt`, `solve_time` and "median s/λ" are those GPU-se
   cuSOLVER's eigenvalues differ from LAPACK's by 2e-3 (`default`, `jacobi`) and 5e-3 (`qr`)
   relative, while Gram matrices agree to 5e-14. LOBPCG with any cuSOLVER variant stalls at a
   residual of 4e-5 (`qr`: 5e-4, then diverging); with `"host"` it converges in 72 iterations, as on
-  the CPU, with ω² equal to 2e-15. Production now uses `GPU_EIGH = "host"`. Next: `--check`.
+  the CPU, with ω² equal to 2e-15. Production switched to `GPU_EIGH = "host"` until the fix below.
 * **Root cause and mpbjax fix (2026-11-20, CPU only so far):** the 1e12 penalty on null directions
   in mpbjax's Rayleigh-Ritz step (§2.2). Emulating cuSOLVER's norm-relative deflation on the CPU
   (off-diagonal entries below 1e-14·‖M‖_F ignored) reproduces the V100 stall exactly (residual
   4.2e-5 for 1000 iterations); with the penalty scaled to the kept block (`_null_penalty`) the same
-  solve converges in 72 iterations with ω² unchanged. mpbjax has a regression test for it. To
-  confirm on the GPU: update mpbx on SuperCloud and run `--diag` (its header says which penalty
-  is installed).
+  solve converges in 72 iterations with ω² unchanged. mpbjax has a regression test for it.
+* **`--diag` on a V100 with the fixed mpbjax (2026-11-20): confirmed.** The recorded Rayleigh-Ritz
+  matrices now agree with LAPACK to 8e-15 (was 2e-3); `default`, `qr`, `jacobi` and `host` all
+  converge in 72 iterations, as on the CPU, with ω² within 4e-15. Production is back to
+  `GPU_EIGH = "default"`. The job step had 40 usable CPUs for the 20 requested (hyper-threads or
+  no core binding on SuperCloud; harmless). Next: `--check`, then `--test` and the benchmark.
   **Do not use the GPU sweep for results until `--check` passes.**
 * **Not run anywhere yet:**
   * a converging GPU solve: memory figures on the V100, compile times, speed;

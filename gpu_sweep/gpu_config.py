@@ -63,15 +63,15 @@ UNITS_PER_GPU = 5           # work units per GPU and geometry (more = better bal
 MAX_SLOTS_PER_CALL = None   # cap on sector solves per batched call (None = as many as fit; 1 = one at a
                             # time, no lockstep). bench_gpu.py --max-slots measures which is faster.
 
-# The small dense eigensolves inside LOBPCG (README §2.2): "host" = LAPACK on the CPU through a host
-# callback (the small matrices are copied off the GPU and back every iteration). cuSOLVER ("default",
-# "qr" = syevd, "jacobi") gets the eigenvalues of mpbx's penalized Rayleigh-Ritz matrices (1e12 on the
-# diagonal for null directions) wrong by ~2e-3 relative, and LOBPCG then never converges: --diag on a
-# V100, 2026-11-20 (README §6). mpbjax now scales that penalty to the kept block (eigensolver.
-# _null_penalty), after which cuSOLVER is expected to converge too (emulated on the CPU, not yet on a
-# GPU): if --diag then shows "default" / "qr" converging, switch to the faster of them (bench).
-# No effect on the CPU backend. Override with GPU_SWEEP_EIGH.
-GPU_EIGH = "host"
+# The small dense eigensolves inside LOBPCG (README §2.2): "default" = what JAX picks (cuSOLVER's
+# batched Jacobi syevj for these small matrices), "qr" = cuSOLVER syevd, "host" = LAPACK on the CPU
+# through a host callback (copies the small matrices off the GPU and back every iteration).
+# cuSOLVER needs mpbjax's scaled null-direction penalty (eigensolver._null_penalty, mpbx 2026-11-20):
+# with the old 1e12 penalty every solve stalled; with the new one "default", "qr" and "jacobi"
+# converge in the CPU's iteration count, ω² within 4e-15 (--diag on a V100, 2026-11-20; README §6).
+# batched_modes.set_eigh refuses a cuSOLVER choice on a GPU if mpbjax is the old one.
+# No effect on the CPU backend. Override with GPU_SWEEP_EIGH; the benchmark compares "qr" and "host".
+GPU_EIGH = "default"
 
 # ---------------------------------------------------------------------------------------
 # --test: tiny configuration (minutes, also on a laptop CPU) to check the whole pipeline. One grid
