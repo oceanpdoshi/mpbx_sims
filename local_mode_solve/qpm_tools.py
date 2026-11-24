@@ -36,7 +36,8 @@ else:
 MPBX_SIMS_DIR = os.path.join(ROOT_PREFIX, "MIT Dropbox/Sagar Doshi/MPBX_SIMS/")
 # t_LN = 390:2:410nm x W_WG = 1.5:0.05:1.9um sweeps (etch = full film, 70 deg sidewall, 1350nm SiO2 clad)
 SWEEP_MATSUDA = os.path.join(MPBX_SIMS_DIR, "tfln_sweep_2026-11-19-16-58/")  # Matsuda MgO:LN
-SWEEP_NANOLN  = os.path.join(MPBX_SIMS_DIR, "tfln_sweep_2026-11-20-23-55/")  # Perturbed Matsuda - NanoLN sample (Die 2_1 VASE)
+# SWEEP_NANOLN  = os.path.join(MPBX_SIMS_DIR, "tfln_sweep_2026-11-20-23-55/")  # Perturbed Matsuda - NanoLN sample (Die 2_1 VASE)
+SWEEP_NANOLN  = os.path.join(MPBX_SIMS_DIR, "tfln_sweep_2026-11-22-00-31/")
 
 _GEOM_RE = re.compile(r"tLN(\d+)_etch\d+_w(\d+)_")
 
