@@ -14,11 +14,11 @@ import sys
 
 import sweep_config as C
 
-T_LN = np.arange(0.390, 0.4101, 0.002)  # LN film thickness
+T_LN = np.arange(0.400, 0.650, 0.100)   # LN film thickness
 ETCH_FRACTION = [1.0]                   # etch depth / t_ln (1.0 = fully etched, no slab)
-W_TOP = np.arange(1.500, 1.9001, 0.050) # ridge top width
+W_TOP = np.arange(0.3, 2.05, 0.100)     # ridge top width
 SIDEWALL_DEG = [70.0]                   # sidewall angle from horizontal (90 = vertical)
-T_CLAD = [1.350]                        # cladding
+T_CLAD = [0]                        # cladding
 
 # The film interfaces sit at the same sub-pixel position in every chunk only if every film / slab
 # thickness is a whole number of pixels (README §2.2). With FIT_DY_TO_FILM (sweep_config.py) the

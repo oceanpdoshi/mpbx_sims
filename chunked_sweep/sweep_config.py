@@ -42,7 +42,7 @@ CHUNKS = (
 #   Chunk("D_1300-1700nm", 1.30, 1.70, Lx=7.0, Ly=7.0, dx=0.025, dy=0.025, nev=3, targets=LOW_TARGETS),
 #   Chunk("E_1700-2000nm", 1.70, 2.00, Lx=8.0, Ly=8.0, dx=0.025, dy=0.025, nev=3, targets=LOW_TARGETS),
 
-STEP = 0.010            # wavelength step [µm]; must divide every chunk's range
+STEP = 0.020            # wavelength step [µm]; must divide every chunk's range
 
 # ---------------------------------------------------------------------------------------
 # Solver
