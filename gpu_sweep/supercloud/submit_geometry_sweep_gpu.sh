@@ -49,6 +49,7 @@ if [ -n "$RESUME" ]; then
     echo "resuming $RUN_DIR"
 else
     [ -n "$CSV" ] && [ -f "$CSV" ] || { echo "usage: $0 GEOMETRIES.csv [--dry-run]   or   $0 --resume RUN_DIR"; exit 1; }
+    check_geometry_csv "$CSV"                              # rib types; a bad row stops here
     if [ "$MODE" = dry ]; then
         RUN_DIR="$(mktemp -d)"
         TMP_RUN=1

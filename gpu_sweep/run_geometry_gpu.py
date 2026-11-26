@@ -134,9 +134,9 @@ def make_units(plan, n_gpus, units_per_gpu, max_lanes, min_run=G.MIN_RUN):
 
 
 def print_plan(plan, units, n_gpus):
-    from geometry_gen.tfln_rib import RibGeometry
+    from geometry_gen.tfln_rib import make_geometry
     print(f"\n=== {plan['name']}")
-    print(f"  {RibGeometry(**plan['geometry']).describe()}")
+    print(f"  {make_geometry(**plan['geometry']).describe()}")
     tot = sum(u["cost"] for u in units) or 1.0
     for c in plan["chunks"]:
         g = c["grid"]
@@ -417,8 +417,8 @@ def consolidate_timing(gdir, name, work):
 
 def write_report(gdir, name, plan, recs, ustats, wall, n_gpus, platform, args_line):
     import numpy as np
-    from geometry_gen.tfln_rib import RibGeometry
-    L = [f"{name}  (GPU run)", f"  {RibGeometry(**plan['geometry']).describe()}",
+    from geometry_gen.tfln_rib import make_geometry
+    L = [f"{name}  (GPU run)", f"  {make_geometry(**plan['geometry']).describe()}",
          f"  written {datetime.datetime.now():%Y-%m-%d %H:%M:%S}   args: {args_line}",
          f"  wall time of this geometry in this run (first unit started -> last unit done): {wall / 3600:.3f} h "
          f"({wall:.0f} s) on {n_gpus} {'GPU' if platform == 'cuda' else 'CPU process'}(es); "
@@ -458,7 +458,8 @@ def write_report(gdir, name, plan, recs, ustats, wall, n_gpus, platform, args_li
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="output folder (one sub-folder per geometry)")
-    ap.add_argument("--geom", default="{}", help="JSON dict of RibGeometry parameters (default geometry otherwise)")
+    ap.add_argument("--geom", default="{}", help="JSON dict of RibGeometry parameters (default geometry otherwise); "
+                    "t_undercut > 0 makes it an undercut rib (RibGeometryUndercut)")
     ap.add_argument("--name", default=None)
     ap.add_argument("--geom-csv", default=None)
     ap.add_argument("--row", type=int, default=None)

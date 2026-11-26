@@ -408,8 +408,8 @@ def merge_geometry(gdir, plan, notes=(), failed=()):
 
 
 def _write_summary(gdir, name, plan, meta, rows, lams, tracks, seams, recs, notes):
-    from geometry_gen.tfln_rib import RibGeometry
-    L = [f"{name}", f"  {RibGeometry(**plan['geometry']).describe()}",
+    from geometry_gen.tfln_rib import make_geometry
+    L = [f"{name}", f"  {make_geometry(**plan['geometry']).describe()}",
          f"  merged {meta['merged']}  code {meta['code_version']}  mpbx {meta['mpbx_version']}  "
          f"backend {meta['backend']}  x64 {meta['x64']}",
          f"  COMPLETE: {meta['complete']}"
@@ -571,7 +571,11 @@ def list_geometries(run_dir):
         with h5py.File(mpath, "r") as f:
             meta = json.loads(f.attrs["meta"])
         recs.append(dict(name=meta["name"], **meta["geometry"], complete=meta["complete"], folder=gdir))
-    return pd.DataFrame(recs)
+    df = pd.DataFrame(recs)
+    if "t_undercut" in df:                     # a run with undercut ribs: 0 = regular rib, column after t_clad
+        uc = df.pop("t_undercut").fillna(0.0)
+        df.insert(list(df.columns).index("t_clad") + 1, "t_undercut", uc)
+    return df
 
 
 def load_all_tracks(run_dir, targets=None):
@@ -580,8 +584,9 @@ def load_all_tracks(run_dir, targets=None):
     parts = []
     for _, g in list_geometries(run_dir).iterrows():
         t = load_tracks(g["folder"], targets=targets)
-        for k in ("name", "t_ln", "etch_depth", "w_top", "sidewall_deg", "t_clad", "complete"):
-            t[k] = g[k]
+        for k in ("name", "t_ln", "etch_depth", "w_top", "sidewall_deg", "t_clad", "t_undercut", "complete"):
+            if k in g:                         # t_undercut: only in runs with undercut ribs
+                t[k] = g[k]
         parts.append(t)
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 

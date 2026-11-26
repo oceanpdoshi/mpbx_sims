@@ -1,8 +1,11 @@
 # One row per waveguide geometry (µm, degrees). t_clad: inf = SiO2 everywhere above, 0 = air,
 # 0 < t_clad < inf = planar SiO2 whose top is t_clad above the ridge top.
 # name is optional: empty -> built from the parameters, e.g. tLN400_etch400_w1800_sw73_cladSiO2
-name,t_ln,etch_depth,w_top,sidewall_deg,t_clad
-,0.400,0.400,1.800,73,inf
-,0.400,0.400,1.600,73,inf
-,0.400,0.400,2.000,73,inf
-,0.400,0.400,1.800,73,0
+# t_undercut is optional (the rib type): empty / 0 = regular rib; > 0 = undercut rib, SiO2 etched this deep
+# [µm] below the LN at the sidewall angle (needs t_clad = 0 and etch_depth = t_ln), e.g. the last row
+name,t_ln,etch_depth,w_top,sidewall_deg,t_clad,t_undercut
+,0.400,0.400,1.800,73,inf,
+,0.400,0.400,1.600,73,inf,
+,0.400,0.400,2.000,73,inf,
+,0.400,0.400,1.800,73,0,
+,0.400,0.400,1.000,70,0,1.000

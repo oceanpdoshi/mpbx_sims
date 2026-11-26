@@ -63,6 +63,8 @@ geom = R.RibGeometry(
     sidewall_deg=73.0,   # from horizontal
     t_clad=np.inf,       # SiO2 everywhere (0 = air clad, finite = planar SiO2 above the ridge top)
 )
+# Undercut rib instead (fully etched, air clad, SiO2 etched t_undercut below the LN at the sidewall angle):
+# geom = R.RibGeometryUndercut(t_ln=0.400, w_top=1.000, sidewall_deg=70.0, t_undercut=1.000)
 # Window and pitch from run_convergence.py (README.md, results/convergence/):
 #  * 6 x 6 µm: TE00/TM00 within 3e-6 (n_eff) / 8e-5 (n_g) of an 8 µm window at λ = 2 µm.
 #  * the error is set by the VERTICAL pitch: n_eff error = C·dy², |C| <= 0.5 (TE) / 0.93 (TM)
