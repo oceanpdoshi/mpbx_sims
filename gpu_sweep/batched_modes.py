@@ -267,7 +267,7 @@ class GridContext:
                  headroom_gb=2.5, max_slots=None, log=print):
         g = grid_info
         self.grid = grid_2d(g["Lx"], g["Ly"], g["Nx"], g["Ny"])
-        self.geom = R.align_to_grid(R.RibGeometry(**geometry), self.grid, frac=align_frac, warn=False)
+        self.geom = R.align_to_grid(R.make_geometry(**geometry), self.grid, frac=align_frac, warn=False)
         self.diel = R.RibDielectric(self.geom, self.grid)
         self.use_parity = use_parity
         self.sectors = (-1, +1) if use_parity else (0,)

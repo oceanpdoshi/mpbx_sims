@@ -209,9 +209,8 @@ def main():
             import results_io as rio
             geometry = rio.load_modes(a.cpu_run)[1]["geometry"]
         geometry = geometry or BASELINE
-        from geometry_gen.tfln_rib import RibGeometry
-        import dataclasses
-        g = {k: v for k, v in dataclasses.asdict(RibGeometry(**geometry)).items() if k in RG.GEOM_KEYS}
+        from geometry_gen.tfln_rib import make_geometry
+        g = RG.plan_geometry(make_geometry(**geometry).as_dict())
         plan = RGG.gpu_plan(dict(name=RG.geometry_name(g), geometry=g), "gpu", False, G.STEP)
     sel = None if not a.chunks else [s.strip() for s in a.chunks.split(",")]
     chunks = [c for c in plan["chunks"] if sel is None or any(c["name"] == s or c["name"].startswith(s) for s in sel)]

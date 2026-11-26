@@ -6,7 +6,7 @@ Staging folder for proofreading. Nothing outside this folder was changed: your
 | file | what it is |
 |---|---|
 | `tfln_setup.py` | `setup_jax("cpu")`: pins JAX to CPU, turns on the on-disk compile cache, checks float64. Call it **before** anything imports mpbjax. |
-| `tfln_rib.py` | `RibGeometry` (LN thickness, etch depth / slab, top width, sidewall angle, SiO2 cladding thickness incl. none / fully clad), Matsuda MgO:LN in the x-cut frame, Kottke-smoothed dielectric (`RibDielectric`), `make_grid`, `align_to_grid`, and `plot_index_map` (index map + geometry outline + pixel zoom + line cuts). |
+| `tfln_rib.py` | `RibGeometry` (LN thickness, etch depth / slab, top width, sidewall angle, SiO2 cladding thickness incl. none / fully clad), `RibGeometryUndercut` (fully etched, air-clad ridge on a SiO2 pedestal: the oxide etched `t_undercut` deeper at the sidewall angle), `make_geometry` (picks the class from `t_undercut`), Matsuda MgO:LN in the x-cut frame, Kottke-smoothed dielectric (`RibDielectric`), `make_grid`, `align_to_grid`, and `plot_index_map` (index map + geometry outline + pixel zoom + line cuts). |
 | `tfln_modes.py` | Solver driver, per-mode diagnostics, `run_sweep`, `ModeSweep` (HDF5 / CSV / DataFrame), `track_mode` (TE00 tracking), `richardson`, `to_si_fields`. |
 | `tfln_plots.py` | n_eff / n_g vs λ (by solver index, and by Hermite-Gaussian label with the TE00 track) and E-fields of every mode at a chosen λ. |
 | `run_checks.py` | ~5 min self-test (material frame, LN area, driver vs `Mo.solve_k`, n_g vs finite difference, power normalization, HDF5 round trip, unetched film vs the exact slab answer). All pass: `results/run_checks.log`. |
@@ -60,6 +60,18 @@ geom = R.RibGeometry(t_ln=0.6, etch_depth=0.3, w_top=1.2, sidewall_deg=65, t_cla
 grid = R.make_grid(6.0, 6.0, dx=0.025, dy=0.0125)
 geom = R.align_to_grid(geom, grid, frac=1/3)          # see section 3
 R.plot_index_map(geom, grid, lam=1.55, fname="check.png")
+```
+
+Undercut rib (`RibGeometryUndercut`): the etch continues `t_undercut` into the SiO2 at the same
+sidewall angle, leaving the fully etched LN ridge on a SiO2 pedestal with air around it (no
+cladding; SiO2 fills the window below the pedestal). It requires `t_clad = 0` and `etch_depth =
+t_ln` (the default). `make_geometry(**params)` returns it for `t_undercut > 0` and a `RibGeometry`
+otherwise; result files (`ModeSweep.geometry`) and the cluster sweeps use that toggle.
+
+```python
+geom = R.RibGeometryUndercut(t_ln=0.4, w_top=1.0, sidewall_deg=70, t_undercut=1.0)
+geom = R.align_to_grid(geom, grid, frac=1/3)          # also checks t_undercut is whole pixels
+R.plot_index_map(geom, grid, lam=1.55, fname="check_undercut.png")   # (c) zooms on the LN/pedestal corner
 ```
 
 Edge cases handled: `etch_depth == t_ln` (no slab), `etch_depth == 0` (unetched film; an mpbx

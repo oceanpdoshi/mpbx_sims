@@ -32,7 +32,7 @@ bash chunked_sweep/supercloud/submit_geometry_sweep.sh my_geoms.csv   # many geo
 | `results_io.py` | writes the per-geometry result files and **reads them** (`load_modes`, `load_tracks`, `load_field`, `list_geometries`, `load_all_tracks`) |
 | `collect_run.py` | run-level tables over all geometries of a run (`run_summary.csv`, `all_tracks.csv`) |
 | `make_geometries.py` | writes a geometry list (CSV) from lists of widths, thicknesses, ... |
-| `geometries_example.csv` | the CSV format |
+| `geometries_example.csv` | the CSV format (incl. the optional `t_undercut` column: the rib type) |
 | `analyze_results.py` | notebook-style (#%%) plotting examples |
 | `supercloud/setup_env.sh` | one-time environment setup on a login node |
 | `supercloud/submit_single_geometry.sh` | submit one geometry (also `--test`, `--dry-run`, `--resume`) |
@@ -323,6 +323,13 @@ bash chunked_sweep/supercloud/submit_single_geometry.sh --dry-run   # grids, cos
 bash chunked_sweep/supercloud/submit_single_geometry.sh
 ```
 
+The rib type is the `T_UNDERCUT` setting: `0` = the regular rib (LN on a flat SiO2 substrate); a
+depth > 0 [µm] = an **undercut rib** (`tfln_rib.RibGeometryUndercut`: the SiO2 is etched that deep
+below the LN at `SIDEWALL_DEG`, leaving a pedestal with air around it). An undercut rib needs
+`T_CLAD=0` and `ETCH_DEPTH=T_LN`; any other combination stops the script with the reason before
+a run folder is made. Its geometry name ends in `_undercut<nm>`. The same holds for
+`gpu_sweep/supercloud/submit_single_geometry_gpu.sh`.
+
 It creates `outputs/<RUN_NAME>_<date-time>/` with `geometries.csv` (one row), `run_info.txt` (git
 commits, settings, job id), `logs/`, a **copy of this repo's code** in `code/` (so editing
 `sweep_config.py` or pulling while the job waits in the queue cannot change the run; a resume uses the
@@ -338,6 +345,13 @@ python chunked_sweep/make_geometries.py my_geoms.csv     # edit its lists first 
 bash chunked_sweep/supercloud/submit_geometry_sweep.sh my_geoms.csv --dry-run
 bash chunked_sweep/supercloud/submit_geometry_sweep.sh my_geoms.csv
 ```
+
+The rib type is the CSV's optional `t_undercut` column (empty / 0 = regular rib, > 0 = undercut
+rib; `make_geometries.py`: the `T_UNDERCUT` list, which only pairs undercuts with `T_CLAD = 0` and
+`ETCH_FRACTION = 1.0`). Both kinds can share one CSV. Every submit script checks the CSV first and
+prints how many geometries of each kind it holds; a bad row stops it before anything is submitted.
+An undercut rib's window also keeps its pedestal `MIN_UNDERCUT_MARGIN` (0.25 µm) inside the window
+(substrate below, air beside); this can enlarge a chunk's window, which the dry run reports.
 
 * **Job array** (`submit_geometry_sweep.sh`): one array task per geometry (up to `MAX_TASKS`; beyond
   that a task solves rows k, k + N, ...), `CPUS = 24` cores each by default (two geometries per

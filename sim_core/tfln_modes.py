@@ -52,7 +52,7 @@ from mpbjax import modes as Mo
 from mpbjax.helmholtz import HMkH, mag_mn
 
 from geometry_gen.tfln_rib import (R_XCUT, RibDielectric, RibGeometry, grid_coords, ln_indices,
-                      sio2_index)
+                      make_geometry, sio2_index)
 from mpbjax import grid_2d
 
 
@@ -317,7 +317,7 @@ class ModeSweep:
 
     @property
     def geometry(self):
-        return RibGeometry(**self.meta["geometry"])
+        return make_geometry(**self.meta["geometry"])          # RibGeometry or RibGeometryUndercut
 
     @property
     def grid(self):

@@ -3,6 +3,8 @@ one set of result files per geometry.
 
     python run_geometry.py --out OUT                                   the default geometry
     python run_geometry.py --out OUT --geom '{"w_top": 1.6, "t_clad": 0}'
+    python run_geometry.py --out OUT --geom '{"w_top": 1.0, "sidewall_deg": 70, "t_clad": 0, "t_undercut": 1.0}'
+                                    an undercut rib (t_undercut > 0: SiO2 etched 1 µm below the LN)
     python run_geometry.py --out OUT --geom-csv geometries.csv --row 3          one row (0-based)
     python run_geometry.py --out OUT --geom-csv geometries.csv --task 2 --n-tasks 10
                                     rows 2, 12, 22, ... (one task of a multi-geometry sweep)
@@ -67,6 +69,11 @@ SMOOTH_PRIMES = (2, 3, 5, 7, 11, 13)
 SHRINK = 0.98                    # a window may come out at most 2 % smaller than asked
 COST_S = 1.0e-4                  # s per (pixel x band²) for one warm λ on one desktop core (README §3)
 GEOM_KEYS = ("t_ln", "etch_depth", "w_top", "sidewall_deg", "t_clad")
+# Optional geometry key / CSV column, the rib-type toggle (tfln_rib.make_geometry): missing, empty or 0
+# -> regular rib (RibGeometry); > 0 -> undercut rib (RibGeometryUndercut: the SiO2 is etched this deep
+# below the LN at the sidewall angle; needs t_clad = 0 and etch_depth = t_ln). A plan's geometry holds
+# it only for an undercut rib, so regular-rib plans (and the runs they resume) are unchanged.
+UNDERCUT_KEY = "t_undercut"
 
 
 # --------------------------------------------------------------------------------------
@@ -81,13 +88,51 @@ def _fmt_nm(x):
 
 def geometry_name(g):
     clad = "SiO2" if math.isinf(g["t_clad"]) else ("air" if g["t_clad"] == 0 else f"{_fmt_nm(g['t_clad'])}nmSiO2")
+    uc = g.get(UNDERCUT_KEY) or 0
     return (f"tLN{_fmt_nm(g['t_ln'])}_etch{_fmt_nm(g['etch_depth'])}_w{_fmt_nm(g['w_top'])}"
-            f"_sw{g['sidewall_deg']:g}_clad{clad}")
+            f"_sw{g['sidewall_deg']:g}_clad{clad}" + (f"_undercut{_fmt_nm(uc)}" if uc else ""))
+
+
+def plan_geometry(params):
+    """The geometry dict a plan stores (and result files compare against): GEOM_KEYS, plus
+    t_undercut only for an undercut rib. ``params``: e.g. a geometry's ``as_dict()``."""
+    g = {k: params[k] for k in GEOM_KEYS}
+    if params.get(UNDERCUT_KEY):
+        g[UNDERCUT_KEY] = params[UNDERCUT_KEY]
+    return g
+
+
+def geometry_kind(g):
+    """'rib' or 'undercut rib (...)' for a plan geometry dict (log lines, submit scripts)."""
+    uc = g.get(UNDERCUT_KEY) or 0
+    return f"undercut rib (SiO2 etched {uc:g} µm below the LN, no cladding)" if uc else "rib"
+
+
+def _undercut_row(g, uc_cell):
+    """Apply the optional t_undercut cell of a CSV row to its geometry dict ``g`` (in place), with the
+    checks RibGeometryUndercut makes, here without importing JAX (submit scripts run this on the
+    login node). Returns an error message or None."""
+    if uc_cell in (None, ""):
+        return None
+    uc = float(uc_cell)
+    if uc == 0:
+        return None
+    if not (math.isfinite(uc) and uc > 0):
+        return f"t_undercut must be >= 0 (0 = regular rib), got {uc_cell}"
+    if g["t_clad"] != 0:
+        return f"an undercut rib (t_undercut = {uc:g} > 0) has no top cladding: set t_clad = 0 (got {g['t_clad']:g})"
+    if abs(g["etch_depth"] - g["t_ln"]) > 1e-9:
+        return (f"an undercut rib (t_undercut = {uc:g} > 0) must be fully etched: set etch_depth = t_ln "
+                f"(got etch_depth {g['etch_depth']:g}, t_ln {g['t_ln']:g})")
+    g["etch_depth"] = g["t_ln"]                  # what RibGeometryUndercut stores (it snaps float noise)
+    g[UNDERCUT_KEY] = uc
+    return None
 
 
 def read_geometry_csv(path):
     """Rows of a geometry list: columns t_ln, etch_depth, w_top, sidewall_deg, t_clad [µm, deg]
-    (t_clad: inf = fully clad, 0 = air), optional 'name'. Blank lines and lines starting with
+    (t_clad: inf = fully clad, 0 = air), optional 'name', optional 't_undercut' [µm] (empty or 0 =
+    regular rib; > 0 = undercut rib, see UNDERCUT_KEY). Blank lines and lines starting with
     # are ignored."""
     try:
         with open(path, newline="", encoding="utf-8-sig") as f:          # utf-8-sig: also a BOM from Excel
@@ -106,6 +151,9 @@ def read_geometry_csv(path):
         if missing:
             raise SystemExit(f"{path}, data row {i}: missing {missing} (header: {header})")
         g = {k: float(r[k]) for k in GEOM_KEYS}
+        err = _undercut_row(g, r.get(UNDERCUT_KEY))
+        if err:
+            raise SystemExit(f"{path}, data row {i}: {err}")
         rows.append(dict(name=r.get("name") or geometry_name(g), geometry=g))
     names = [r["name"] for r in rows]
     dup = sorted({n for n in names if names.count(n) > 1})
@@ -126,8 +174,8 @@ def select_geometries(a):
                 raise SystemExit(f"--task {a.task} must be in [0, --n-tasks={a.n_tasks})")
             return rows[a.task::a.n_tasks]
         return rows
-    from geometry_gen.tfln_rib import RibGeometry
-    g = {k: v for k, v in dataclasses.asdict(RibGeometry(**json.loads(a.geom))).items() if k in GEOM_KEYS}
+    from geometry_gen.tfln_rib import make_geometry
+    g = plan_geometry(make_geometry(**json.loads(a.geom)).as_dict())
     return [dict(name=a.name or geometry_name(g), geometry=g)]
 
 
@@ -159,10 +207,15 @@ def film_dy(dy, geom):
 def chunk_grid(chunk, geom):
     """Pixel counts of a chunk for a geometry: the chunk's window rounded to FFT-friendly counts,
     enlarged if it leaves less than MIN_MARGIN·λ_max of cladding beside / above / below the guide.
+    An undercut rib's SiO2 pedestal must also end MIN_UNDERCUT_MARGIN inside the window (substrate
+    below it, air beside it); the window stays centered on the LN film.
     With FIT_DY_TO_FILM, dy is the chunk's dy adjusted to fit the film (``film_dy``)."""
     margin = C.MIN_MARGIN * chunk.lam_max
     need_x = geom.w_base + 2 * margin
     need_y = geom.t_ln + 2 * margin
+    if geom.y_sub < geom.y0:                                  # undercut rib (RibGeometryUndercut)
+        need_x = max(need_x, geom.w_footprint + 2 * C.MIN_UNDERCUT_MARGIN)
+        need_y = max(need_y, geom.t_ln + 2 * (geom.y0 - geom.y_sub + C.MIN_UNDERCUT_MARGIN))
     dy = film_dy(chunk.dy, geom) if C.FIT_DY_TO_FILM else chunk.dy
     out = {}
     for ax, L, d, need, odd in (("x", chunk.Lx, chunk.dx, need_x, C.USE_PARITY),
@@ -184,7 +237,8 @@ def layer_warnings(geom, grid):
     dy, w = grid["dy"], []
     clad_in = geom.t_clad < math.inf and 0.5 * geom.t_ln + geom.t_clad < 0.5 * grid["Ly"]
     for name, t, check in (("t_ln", geom.t_ln, True), ("slab", geom.t_slab, True),
-                           ("t_clad", geom.t_clad, clad_in)):
+                           ("t_clad", geom.t_clad, clad_in),
+                           ("t_undercut", getattr(geom, "t_undercut", 0.0), True)):
         if check and 0 < t < math.inf and abs(t / dy - round(t / dy)) > 1e-6:
             w.append(f"{name} = {t:.6g} µm is not a multiple of dy = {1e3 * dy:.3f} nm"
                      + (" (cladding top surface: matters only where the mode reaches it)" if name == "t_clad" else ""))
@@ -222,8 +276,8 @@ def owner_chunk(lam, chunks):
 # Plan of one geometry
 # --------------------------------------------------------------------------------------
 def geometry_plan(entry, chunks, step, fields, only=None):
-    from geometry_gen.tfln_rib import RibGeometry
-    geom = RibGeometry(**entry["geometry"])
+    from geometry_gen.tfln_rib import make_geometry
+    geom = make_geometry(**entry["geometry"])
     plan = dict(name=entry["name"], geometry=entry["geometry"], step=step, fields=fields,
                 use_parity=C.USE_PARITY, align_frac=C.ALIGN_FRAC, k_tol=C.K_TOL, eig_tol=C.EIG_TOL,
                 nev_extra=C.NEV_EXTRA, min_margin=C.MIN_MARGIN, field_dtype=C.FIELD_DTYPE,
@@ -239,7 +293,9 @@ def geometry_plan(entry, chunks, step, fields, only=None):
         for ax in "xy":
             if g[f"enlarged_{ax}"]:
                 plan["warnings"].append(f"{c.name}: window enlarged in {ax} to {g[f'L{ax}']:.3f} µm "
-                                        f"(MIN_MARGIN = {C.MIN_MARGIN} x λ_max of cladding around the guide)")
+                                        f"(MIN_MARGIN = {C.MIN_MARGIN} x λ_max of cladding around the guide"
+                                        + (f"; undercut rib: pedestal + MIN_UNDERCUT_MARGIN = {C.MIN_UNDERCUT_MARGIN} µm"
+                                           if geom.y_sub < geom.y0 else "") + ")")
         for msg in layer_warnings(geom, g):
             layer.setdefault(msg, []).append(c.name.split("_")[0])
     plan["warnings"] += [f"{'all chunks' if len(n) == len(chunks) else ', '.join(n)}: {msg}"
@@ -404,7 +460,7 @@ def run_unit(unit, plan, work):
     dkey = (plan["name"], c["name"])
     if _W["diel_key"] != dkey:
         grid = grid_2d(g["Lx"], g["Ly"], g["Nx"], g["Ny"])
-        geom = R.align_to_grid(R.RibGeometry(**plan["geometry"]), grid, frac=plan["align_frac"], warn=False)
+        geom = R.align_to_grid(R.make_geometry(**plan["geometry"]), grid, frac=plan["align_frac"], warn=False)
         _W["diel"], _W["diel_key"] = R.RibDielectric(geom, grid), dkey
     diel = _W["diel"]
     d = os.path.join(work, c["name"])
@@ -555,8 +611,8 @@ def _gb(x):
 
 def print_plan(plan, units, n_workers, cpw):
     print(f"\n=== {plan['name']}")
-    from geometry_gen.tfln_rib import RibGeometry
-    print(f"  {RibGeometry(**plan['geometry']).describe()}")
+    from geometry_gen.tfln_rib import make_geometry
+    print(f"  {make_geometry(**plan['geometry']).describe()}")
     est = {e["chunk"]: e for e in plan_estimates(plan)}
     tot_cost = sum(e["cost"] for e in est.values())
     for c in plan["chunks"]:
@@ -573,7 +629,8 @@ def print_plan(plan, units, n_workers, cpw):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="output folder (one sub-folder per geometry)")
-    ap.add_argument("--geom", default="{}", help="JSON dict of RibGeometry parameters (default geometry otherwise)")
+    ap.add_argument("--geom", default="{}", help="JSON dict of RibGeometry parameters (default geometry otherwise); "
+                    "t_undercut > 0 makes it an undercut rib (RibGeometryUndercut)")
     ap.add_argument("--name", default=None, help="name of the --geom geometry (default: built from its parameters)")
     ap.add_argument("--geom-csv", default=None, help="CSV geometry list (see geometries_example.csv)")
     ap.add_argument("--row", type=int, default=None, help="0-based row of --geom-csv")

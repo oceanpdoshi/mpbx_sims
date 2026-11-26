@@ -46,6 +46,7 @@ if [ -n "$RESUME" ]; then
     read -r -a ARGS < "$RUN_DIR/run_args.txt"
 else
     [ -n "$CSV" ] && [ -f "$CSV" ] || { echo "usage: $0 GEOMETRIES.csv   or   $0 --resume RUN_DIR"; exit 1; }
+    check_geometry_csv "$CSV"                              # rib types; a bad row stops here
     RUN_DIR="$(new_run_dir "$OUT_ROOT" "$RUN_NAME")"
     snapshot_code "$RUN_DIR"
     cp "$CSV" "$RUN_DIR/geometries.csv"

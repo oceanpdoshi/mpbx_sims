@@ -27,6 +27,21 @@ Rib cross-section (all heights measured from the LN/substrate interface):
              SiO2 substrate (BOX)
    sidewall angle = interior angle at the ridge base, measured from HORIZONTAL
    (90° = vertical walls), the same convention as the Tidy3D notebook (73°).
+
+Undercut rib (RibGeometryUndercut): a fully etched ridge whose etch continues t_undercut
+into the SiO2 at the same sidewall angle, leaving the LN on a SiO2 pedestal. No cladding.
+
+             |<-- w_top -->|
+              _____________          ___ y_top = y0 + t_ln
+             /     LN      \            |  t_ln (fully etched: no slab)
+            /_______________\        ___|_ y0   (LN / SiO2 interface)
+           /  SiO2 pedestal  \          |  t_undercut
+    ______/                   \______  _|_ y_sub = y0 - t_undercut
+   |         SiO2 substrate          |      (fills the window below y_sub)
+   air everywhere else: beside the ridge and the pedestal, and above.
+
+``make_geometry(**params)`` picks the class from the parameters: t_undercut > 0 gives a
+RibGeometryUndercut, a missing / 0 t_undercut a RibGeometry (the sweep CSVs use this toggle).
 """
 from __future__ import annotations
 
@@ -170,6 +185,17 @@ class RibGeometry:
     def fully_clad(self):
         return math.isinf(self.t_clad)
 
+    @property
+    def y_sub(self):
+        """Top of the full-width SiO2 substrate [µm]: the film sits on it (= y0). Lower for an
+        undercut rib (RibGeometryUndercut), whose SiO2 pedestal sits on it."""
+        return self.y0
+
+    @property
+    def w_footprint(self):
+        """Widest part of the etched structure [µm]: the ridge (an undercut rib: its pedestal base)."""
+        return max(self.w_base, self.w_top)
+
     def replace(self, **kw):
         """Copy with some parameters changed, e.g. ``geom.replace(w_top=1.6)``."""
         return dataclasses.replace(self, **kw)
@@ -273,6 +299,130 @@ class RibGeometry:
         return n_cut
 
 
+@dataclasses.dataclass(frozen=True)
+class RibGeometryUndercut(RibGeometry):
+    """Fully etched X-cut TFLN ridge on a SiO2 PEDESTAL, no cladding (module docstring sketch).
+
+    The etch goes ``t_undercut`` into the SiO2 below the LN at the same sidewall angle, so the
+    ridge sidewalls continue straight into the oxide: the pedestal is ``w_base`` wide under the
+    LN and ``w_pedestal`` wide on the substrate. Below the pedestal (y < y_sub) SiO2 fills the
+    window; everything that is neither LN nor SiO2 is air.
+
+    Parameters: those of RibGeometry, plus
+    t_undercut : depth of the oxide etch below the LN [µm], >= 0. 0 is the same structure as
+                 RibGeometry(t_clad=0) with a full etch (``make_geometry`` returns that for 0).
+    and two constraints (a slab or a cladding would make the undercut meaningless):
+    etch_depth : must equal t_ln (fully etched). None (the default) -> t_ln.
+    t_clad     : must be 0 (air), the default.
+
+    The guidance cutoff (``cutoff_index``) is n_SiO2, as for any air-clad ridge on SiO2: the
+    substrate is still semi-infinite below the pedestal.
+    """
+    etch_depth: float | None = None
+    t_clad: float = 0.0
+    t_undercut: float = 1.0
+
+    def __post_init__(self):
+        # snap etch_depth to t_ln (None, or float noise): a 1e-17 µm "slab" would be a real layer
+        if self.etch_depth is None or abs(self.etch_depth - self.t_ln) <= 1e-9:
+            object.__setattr__(self, "etch_depth", self.t_ln)
+        super().__post_init__()
+        if self.etch_depth != self.t_ln:
+            raise ValueError(f"RibGeometryUndercut needs a fully etched ridge: etch_depth = t_ln = {self.t_ln} "
+                             f"(got etch_depth = {self.etch_depth}); a slab would cover the oxide")
+        if self.t_clad != 0:
+            raise ValueError(f"RibGeometryUndercut has no top cladding: t_clad must be 0 (air), got {self.t_clad}")
+        if not (math.isfinite(self.t_undercut) and self.t_undercut >= 0):
+            raise ValueError(f"t_undercut must be finite and >= 0, got {self.t_undercut}")
+
+    # ---- derived heights / widths ---------------------------------------------------
+    @property
+    def y_sub(self):
+        """Top of the full-width SiO2 substrate = base of the pedestal [µm]."""
+        return self.y0 - self.t_undercut
+
+    @property
+    def w_pedestal(self):
+        """Width of the SiO2 pedestal at its base, on the substrate [µm] (its top is w_base)."""
+        if self.sidewall_deg >= 90:
+            return self.w_base
+        return self.w_base + 2.0 * self.t_undercut / math.tan(math.radians(self.sidewall_deg))
+
+    @property
+    def w_footprint(self):
+        return max(self.w_pedestal, self.w_top)
+
+    def replace(self, **kw):
+        """Copy with some parameters changed; the ridge stays fully etched (etch_depth follows t_ln)."""
+        if "t_ln" in kw and "etch_depth" not in kw:
+            kw["etch_depth"] = None
+        return dataclasses.replace(self, **kw)
+
+    def describe(self):
+        return (f"UNDERCUT rib: LN film t_ln = {self.t_ln:.3f} µm, fully etched, w_top = {self.w_top:.3f} µm, "
+                f"w_base = {self.w_base:.3f} µm, sidewall = {self.sidewall_deg:.1f}° from horizontal; "
+                f"SiO2 etched t_undercut = {self.t_undercut:.3f} µm below the LN at the same angle "
+                f"(pedestal {self.w_base:.3f} -> {self.w_pedestal:.3f} µm wide); cladding: none (air); "
+                f"LN/SiO2 interface at y = {self.y0:+.3f} µm, substrate top at y = {self.y_sub:+.3f} µm")
+
+    # ---- mpbx shapes ----------------------------------------------------------------
+    def shapes(self, far=200.0):
+        """(shapes, minds) as in RibGeometry.shapes: LN ridge, SiO2 pedestal, SiO2 substrate box
+        (y in [y_sub - far/2, y_sub]), air background. First-shape-wins, so the LN owns the
+        edge it shares with the pedestal top. mpbx polygons are convex, hence pedestal and
+        substrate are two shapes; where both meet air (the pedestal's base corners) the pixel
+        is a 3-shape "multi" pixel, like the LN / SiO2 / air corners at the ridge base."""
+        th = math.radians(self.sidewall_deg)
+        shapes = [Shp.Trapezoid([0.0, self.y0], self.w_base, self.t_ln, th)]
+        minds = [I_LN]
+        if self.t_undercut > 0:          # a zero-height Trapezoid raises in mpbx: omit it
+            shapes.append(Shp.Trapezoid([0.0, self.y_sub], self.w_pedestal, self.t_undercut, th))
+            minds.append(I_SIO2)
+        y_lo = self.y_sub - 0.5 * far
+        shapes.append(Shp.Cuboid.make([0.0, 0.5 * (y_lo + self.y_sub)], [far, self.y_sub - y_lo]))
+        minds += [I_SIO2, I_AIR]         # substrate, then the background = air
+        return tuple(shapes), tuple(minds)
+
+    # ---- outline (ln_mask / ln_fill / cutoff_index are RibGeometry's: same LN, n_cut = n_SiO2)
+    def outline(self, x_extent):
+        """Polylines [(x, y), ...] of the material boundaries inside ``x_extent``."""
+        xa, xb = x_extent
+        hb, hp = 0.5 * self.w_base, 0.5 * self.w_pedestal
+        lines = [(np.array([-hb, -0.5 * self.w_top, 0.5 * self.w_top, hb, -hb]),     # LN ridge, closed:
+                  np.array([self.y0, self.y_top, self.y_top, self.y0, self.y0]))]     # its base is LN/SiO2
+        if self.t_undercut > 0:          # pedestal sidewalls, clipped to the window
+            for s, edge in ((-1.0, -xa), (1.0, xb)):
+                h = min(hp, edge)
+                if h > hb:
+                    y_end = self.y0 - (h - hb) / (hp - hb) * self.t_undercut
+                    lines.append((np.array([s * hb, s * h]), np.array([self.y0, y_end])))
+        if xa < -hp:                     # substrate top / air, beside the pedestal
+            lines.append((np.array([xa, -hp]), np.array([self.y_sub] * 2)))
+        if hp < xb:
+            lines.append((np.array([hp, xb]), np.array([self.y_sub] * 2)))
+        return lines
+
+
+def make_geometry(**params):
+    """RibGeometry or RibGeometryUndercut from keyword parameters: a CSV row, a ``--geom`` JSON
+    dict, or a result file's stored ``geometry`` (``as_dict()``). The toggle is ``t_undercut``:
+    missing / None / NaN / 0 -> RibGeometry; anything else -> RibGeometryUndercut, which raises
+    unless t_clad = 0 and etch_depth = t_ln (and t_undercut > 0).
+
+    Defaults: without a t_undercut key, missing parameters take RibGeometry's defaults (as
+    before). With one (even 0), a missing etch_depth / t_clad takes the undercut rib's (full
+    etch, air), so changing t_undercut between > 0 and 0 changes only the oxide etch."""
+    if "t_undercut" not in params:
+        return RibGeometry(**params)
+    t_uc = params.pop("t_undercut")
+    if params.get("etch_depth") is None:
+        params["etch_depth"] = params.get("t_ln", RibGeometry.t_ln)
+    params.setdefault("t_clad", 0.0)
+    if t_uc is None or t_uc != t_uc or t_uc == 0:        # (t_uc != t_uc: NaN, e.g. an empty pandas cell)
+        return RibGeometry(**params)
+    return RibGeometryUndercut(t_undercut=float(t_uc), **params)
+
+
 # --------------------------------------------------------------------------------------
 # Simulation window and smoothed dielectric
 # --------------------------------------------------------------------------------------
@@ -311,8 +461,9 @@ def align_to_grid(geom: RibGeometry, grid, frac=0.0, warn=True):
     frac 1/2, µm⁻²). Pitches that move the interfaces to a different frac therefore give
     a zig-zag "convergence". Keep frac fixed, and make the film (and slab) an integer
     number of pixels thick, so the error is one smooth C·dy² term (Richardson-friendly:
-    halving dy keeps frac = 0). The same applies to the slab top and to the top surface of
-    a finite cladding; a warning is issued for any layer that is not a whole number of pixels."""
+    halving dy keeps frac = 0). The same applies to the slab top, to the top surface of
+    a finite cladding and to an undercut rib's substrate top; a warning is issued for any
+    layer that is not a whole number of pixels."""
     _, ys = grid_coords(grid)
     dy = grid.Ly / grid.Ny
     j = round((geom.y0 - ys[0]) / dy - frac)
@@ -321,6 +472,8 @@ def align_to_grid(geom: RibGeometry, grid, frac=0.0, warn=True):
         layers = [("t_ln", geom.t_ln), ("t_slab", geom.t_slab)]
         if 0 < geom.t_clad < math.inf:                  # SiO2/air surface above the ridge
             layers.append(("t_clad", geom.t_clad))
+        if getattr(geom, "t_undercut", 0) > 0:          # substrate top below the pedestal
+            layers.append(("t_undercut", geom.t_undercut))
         for name, t in layers:
             if t > 0 and abs(t / dy - round(t / dy)) > 1e-6:
                 warnings.warn(f"{name} = {t} µm is not an integer number of pixels (dy = {dy:.5f} µm): "
@@ -344,11 +497,18 @@ class RibDielectric:
         self.shapes, self.minds = geom.shapes()
         self.plan = smoothing_plan(self.shapes, self.minds, grid)
         dy = grid.Ly / grid.Ny
-        for name, t in (("slab", geom.t_slab), ("cladding", geom.t_clad)):
+        for name, t in (("slab", geom.t_slab), ("cladding", geom.t_clad),
+                        ("undercut (SiO2 pedestal)", getattr(geom, "t_undercut", 0.0))):
             if 0 < t < dy:
                 warnings.warn(f"{name} thickness {t:.4f} µm is below the vertical pitch {dy:.4f} µm: "
                               "a layer that holds no pixel corner is invisible to the smoothing "
                               "(mpbx GOTCHAS #26). Refine the grid.")
+        if geom.y_sub < geom.y0:                        # undercut rib: is its pedestal inside the window?
+            xs, ys = grid_coords(grid)
+            if 0.5 * geom.w_footprint >= min(-xs[0], xs[-1]) or geom.y_sub <= ys[0]:
+                warnings.warn(f"the window ({grid.Lx:g} x {grid.Ly:g} µm) cuts off the SiO2 pedestal "
+                              f"({geom.w_pedestal:.3f} µm wide at y = {geom.y_sub:+.3f} µm): with periodic "
+                              "boundaries the solver then sees a different structure. Enlarge the window.")
 
     def at(self, lam):
         lo, hi = LAM_RANGE
@@ -389,7 +549,9 @@ def plot_index_map(geom: RibGeometry, grid, lam=1.55, diel: RibDielectric | None
     (a) n_xx = sqrt(ε_xx), the index seen by TE (crystal Z), full window
     (b) n_yy = sqrt(ε_yy), the index seen by TM (crystal X), zoomed on the core region
     (c) zoom on the right sidewall, pixel by pixel: shows the sub-pixel (Kottke) smoothing
+        (undercut rib: on the corner where the LN, the SiO2 pedestal and air meet)
     (d) line cuts through the ridge: horizontal at mid-ridge height and vertical at x = 0
+        (undercut rib: also horizontal at mid-pedestal height)
     """
 
     diel = diel or RibDielectric(geom, grid)
@@ -405,8 +567,9 @@ def plot_index_map(geom: RibGeometry, grid, lam=1.55, diel: RibDielectric | None
     gs = fig.add_gridspec(2, 2)
     # (a) full window: where the waveguide sits in the window
     # (b) core region: TM index map with the outline
-    half_x = 0.5 * max(geom.w_base, geom.w_top) + 0.6
-    core = ((-half_x, half_x), (geom.y0 - 0.5, geom.y_top + 0.5))
+    undercut = geom.y_sub < geom.y0                     # RibGeometryUndercut with t_undercut > 0
+    half_x = 0.5 * geom.w_footprint + 0.6
+    core = ((max(-half_x, xe[0]), min(half_x, xe[-1])), (max(geom.y_sub - 0.5, ye[0]), min(geom.y_top + 0.5, ye[-1])))
     for cell, n, title, lims in (
             (gs[0, 0], n_xx, f"(a) $n_{{xx}}$ (TE, crystal Z), full window: LN n_e = {n_e:.4f}", None),
             (gs[0, 1], n_yy, f"(b) $n_{{yy}}$ (TM, crystal X), core: LN n_o = {n_o:.4f}", core)):
@@ -414,15 +577,18 @@ def plot_index_map(geom: RibGeometry, grid, lam=1.55, diel: RibDielectric | None
         im = ax.pcolormesh(xe, ye, n.T, cmap="Greys", vmin=vmin, vmax=vmax, shading="flat")
         draw_outline(ax, geom, grid)
         ax.set(aspect="equal", xlabel="x [µm]", ylabel="y [µm]", title=title)
-        if lims:
-            ax.set(xlim=lims[0], ylim=lims[1])
+        lims = lims or ((xe[0], xe[-1]), (ye[0], ye[-1]))  # never beyond the window (outline overhang)
+        ax.set(xlim=lims[0], ylim=lims[1])
         fig.colorbar(im, ax=ax, shrink=0.85, label="index")
 
     # (c) zoom on the right sidewall, pixel edges visible
     ax = fig.add_subplot(gs[1, 0])
     if zoom is None:
-        xc = 0.25 * (geom.w_top + geom.w_base) if geom.etch_depth > 0 else 0.0
-        yc = 0.5 * (geom.y0 + geom.y_top)
+        if undercut:                                    # LN / SiO2 pedestal / air corner
+            xc, yc = 0.5 * geom.w_base, geom.y0
+        else:
+            xc = 0.25 * (geom.w_top + geom.w_base) if geom.etch_depth > 0 else 0.0
+            yc = 0.5 * (geom.y0 + geom.y_top)
         half = max(0.6 * geom.t_ln, 8 * grid.Lx / grid.Nx)
         zoom = ((xc - half, xc + half), (yc - half, yc + half))
     im = ax.pcolormesh(xe, ye, n_xx.T, cmap="Greys", vmin=vmin, vmax=vmax, shading="flat",
@@ -434,22 +600,29 @@ def plot_index_map(geom: RibGeometry, grid, lam=1.55, diel: RibDielectric | None
     fig.colorbar(im, ax=ax, shrink=0.85, label="index")
 
     # (d) line cuts, horizontal and vertical, stacked (one x-axis each)
-    sub = gs[1, 1].subgridspec(2, 1)
-    ax_h, ax_v = fig.add_subplot(sub[0]), fig.add_subplot(sub[1])
+    sub = gs[1, 1].subgridspec(3 if undercut else 2, 1)
+    ax_h, ax_v = fig.add_subplot(sub[0]), fig.add_subplot(sub[-1])
     y_mid = 0.5 * (geom.y_slab + geom.y_top) if geom.etch_depth > 0 else 0.5 * (geom.y0 + geom.y_top)
     jy = int(np.argmin(np.abs(ys - y_mid)))
     ix = int(np.argmin(np.abs(xs)))
-    for a, coord, cut_xx, cut_yy, lab, bounds in (
-            (ax_h, xs, n_xx[:, jy], n_yy[:, jy], f"x [µm]  (cut at y = {ys[jy]:+.3f} µm)",
+    cuts = [(ax_h, xs, n_xx[:, jy], n_yy[:, jy], f"x [µm]  (cut at y = {ys[jy]:+.3f} µm)",
              [-0.5 * geom.w_top, 0.5 * geom.w_top, -0.5 * geom.w_base, 0.5 * geom.w_base]
              if geom.etch_depth > 0 else []),
             (ax_v, ys, n_xx[ix, :], n_yy[ix, :], f"y [µm]  (cut at x = {xs[ix]:+.3f} µm)",
              [geom.y0, geom.y_slab, geom.y_top] +
-             ([geom.y_clad_top] if not geom.fully_clad and geom.t_clad > 0 else []))):
+             ([geom.y_clad_top] if not geom.fully_clad and geom.t_clad > 0 else []) +
+             ([geom.y_sub] if undercut else []))]
+    if undercut:                                        # through the pedestal, half way down
+        jp = int(np.argmin(np.abs(ys - 0.5 * (geom.y0 + geom.y_sub))))
+        hw = 0.5 * (geom.w_base + (geom.w_pedestal - geom.w_base) * (geom.y0 - ys[jp]) / geom.t_undercut)
+        cuts.insert(1, (fig.add_subplot(sub[1]), xs, n_xx[:, jp], n_yy[:, jp],
+                        f"x [µm]  (cut through the pedestal at y = {ys[jp]:+.3f} µm)", [-hw, hw]))
+    for a, coord, cut_xx, cut_yy, lab, bounds in cuts:
         a.plot(coord, cut_xx, color="#2a78d6", lw=2, label="$n_{xx}$ (TE)")
         a.plot(coord, cut_yy, color="#eb6834", lw=2, ls="--", label="$n_{yy}$ (TM)")
         for b in bounds:
-            a.axvline(b, color="#52514e", lw=0.8, ls=":")
+            if coord[0] <= b <= coord[-1]:             # (a pedestal wider than the window: off the cut)
+                a.axvline(b, color="#52514e", lw=0.8, ls=":")
         a.set(xlabel=lab, ylabel="index")
         a.grid(alpha=0.25)
     ax_h.set_title("(d) line cuts; dotted = geometry boundaries")

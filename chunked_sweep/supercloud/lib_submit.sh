@@ -15,6 +15,25 @@ check_env() {
     fi
 }
 
+# check_geometry_csv CSV: read and check a geometry list exactly as the jobs will (run_geometry.py's
+# read_geometry_csv; no JAX, seconds) and print each geometry's rib type (regular / undercut), so a bad
+# row (e.g. t_undercut > 0 with a cladding or a slab) stops the script before anything is submitted.
+check_geometry_csv() {
+    HDF5_USE_FILE_LOCKING=FALSE PYTHONNOUSERSITE=1 "$PY" - "$REPO/chunked_sweep" "$1" <<'EOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+from run_geometry import geometry_kind, read_geometry_csv
+rows = read_geometry_csv(sys.argv[2])
+kinds = [geometry_kind(r["geometry"]) for r in rows]
+n_uc = sum(k != "rib" for k in kinds)
+print(f"geometries: {len(rows)} ({len(rows) - n_uc} regular rib, {n_uc} undercut rib)")
+for r, k in list(zip(rows, kinds))[:10]:
+    print(f"  {r['name']}: {k}")
+if len(rows) > 10:
+    print(f"  ... and {len(rows) - 10} more")
+EOF
+}
+
 # new_run_dir OUT_ROOT RUN_NAME -> prints the new folder OUT_ROOT/RUN_NAME_<date-time>[_n]
 new_run_dir() {
     local base="$1/${2}_$(date +%F-%H-%M)" d n=2

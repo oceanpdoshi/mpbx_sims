@@ -66,6 +66,10 @@ MIN_MARGIN = 1.4        # the window must leave >= MIN_MARGIN·λ_max of claddin
                         # the ridge base / film (else it is enlarged). 1.4 matches the window
                         # study: it keeps the window error of n_g below ~1e-5 except for modes
                         # near cutoff (TM10 above ~1.8 µm).
+MIN_UNDERCUT_MARGIN = 0.25  # undercut rib (t_undercut > 0) only: its SiO2 pedestal must end at least
+                        # this far [µm] inside the window: substrate below its base, air beside it (else
+                        # the window is enlarged; it stays centered on the LN film). The field decay is
+                        # MIN_MARGIN's job; this only keeps the structure itself inside the window.
 K_TOL = 1e-8            # Newton tolerance on k [1/µm]; n_eff is converged to ~K_TOL·λ
 EIG_TOL = 1e-8          # LOBPCG relative residual tolerance
 

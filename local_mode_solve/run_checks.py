@@ -9,6 +9,8 @@
 5. fields are normalized to unit power, ∫ Re(E* × H)_z dA = 1
 6. ModeSweep HDF5 save / load round trip
 7. an unetched film (exact answer: 3-layer slab) at the production pitch/alignment
+8. undercut rib (RibGeometryUndercut): make_geometry toggle and its checks, t_undercut = 0 == the
+   air-clad rib, ridge / pedestal areas and indices of the smoothed ε, the undercut lowers n_eff
 """
 import os
 import sys
@@ -139,6 +141,86 @@ with tempfile.TemporaryDirectory() as tmp:
                else np.array_equal(back.data[k], sw0.data[k]) for k in sw0.data)
     check("HDF5 round trip", same and np.array_equal(back.E, sw0.E) and back.geometry == geom
           and back.grid == grid, f"{os.path.getsize(path) / 1e6:.2f} MB")
+
+# 8 -------------------------------------------------------------------------------------
+# Undercut rib (RibGeometryUndercut): the make_geometry toggle and its checks, t_undercut = 0 is
+# the air-clad full etch, the smoothed ε has the analytic ridge / pedestal, the undercut lowers n_eff.
+uc = R.RibGeometryUndercut(t_ln=0.4, w_top=1.0, sidewall_deg=70, t_undercut=1.0)
+kinds = [type(R.make_geometry(**p)).__name__ for p in (
+    dict(t_clad=1.35), dict(t_clad=1.35, t_undercut=0), dict(t_clad=0.0, t_undercut=float("nan")),
+    dict(t_clad=0.0, t_undercut=1.0))]
+check("make_geometry toggle (t_undercut missing / 0 / NaN / > 0)",
+      kinds == ["RibGeometry"] * 3 + ["RibGeometryUndercut"] and R.make_geometry(**uc.as_dict()) == uc, str(kinds))
+bad = []
+for p in (dict(t_clad=1.35), dict(t_clad=np.inf), dict(etch_depth=0.3), dict(t_undercut=-0.1),
+          dict(t_undercut=np.inf)):
+    try:
+        R.make_geometry(**dict(dict(t_ln=0.4, t_clad=0.0, t_undercut=1.0), **p))
+        bad.append(p)
+    except ValueError:
+        pass
+check("RibGeometryUndercut rejects a cladding, a slab, t_undercut < 0 / inf", not bad, f"accepted: {bad}")
+a, b = (R.make_geometry(t_ln=0.6, w_top=1.0, t_undercut=t) for t in (1.0, 0))
+check("t_undercut 1 -> 0 changes only the oxide etch; replace(t_ln=...) keeps the full etch",
+      (a.etch_depth, a.t_clad) == (b.etch_depth, b.t_clad) == (0.6, 0.0) and uc.replace(t_ln=0.5).etch_depth == 0.5,
+      f"{type(a).__name__} vs {type(b).__name__}: etch {b.etch_depth}, t_clad {b.t_clad}")
+
+grid = R.make_grid(6.0, 6.0, 0.025)
+d0 = R.RibDielectric(R.RibGeometryUndercut(t_ln=0.4, w_top=1.0, sidewall_deg=70, t_undercut=0.0), grid).at(1.0)
+d1 = R.RibDielectric(R.RibGeometry(t_ln=0.4, etch_depth=0.4, w_top=1.0, sidewall_deg=70, t_clad=0.0), grid).at(1.0)
+check("t_undercut = 0 gives exactly the air-clad fully etched rib", np.array_equal(d0["eps"], d1["eps"]))
+
+ga = R.align_to_grid(uc, grid, frac=1 / 3)                # production-like: interfaces 1/3 px off centres
+d = R.RibDielectric(ga, grid).at(1.0)
+xs, ys = R.grid_coords(grid)
+dx, dy = grid.Lx / grid.Nx, grid.Ly / grid.Ny
+n_e, n_o = R.ln_indices(1.0)
+e_s = R.sio2_index(1.0) ** 2
+ezz = d["eps"][2, 2]                    # tangential to every interface: the area-weighted mean
+for name, lo, hi, e_in, w_of_y in (
+        ("LN ridge", ga.y0, ga.y_top, n_o ** 2,
+         lambda y: ga.w_base + (ga.w_top - ga.w_base) * (y - ga.y0) / ga.t_ln),
+        ("SiO2 pedestal", ga.y_sub, ga.y0, e_s,
+         lambda y: ga.w_base + (ga.w_pedestal - ga.w_base) * (ga.y0 - y) / ga.t_undercut)):
+    rows = np.flatnonzero((ys - dy / 2 > lo + 1e-9) & (ys + dy / 2 < hi - 1e-9))   # rows fully inside
+    y_a, y_b = ys[rows[0]] - dy / 2, ys[rows[-1]] + dy / 2
+    area = ((ezz[:, rows] - 1.0) / (e_in - 1.0)).sum() * dx * dy                   # air around it
+    exact = 0.5 * (w_of_y(y_a) + w_of_y(y_b)) * (y_b - y_a)
+    check(f"undercut rib: {name} area of the smoothed ε", abs(area - exact) < 1e-3 * dx * dy * len(rows),
+          f"{area:.6f} vs {exact:.6f} µm² over {len(rows)} rows")
+
+
+def n_at(x, y, comp):
+    return float(np.sqrt(d["eps"][comp, comp][np.argmin(np.abs(xs - x)), np.argmin(np.abs(ys - y))]))
+
+
+y_mid_ped = 0.5 * (ga.y0 + ga.y_sub)
+pts = {"LN n_xx = n_e": (n_at(0, 0.5 * (ga.y0 + ga.y_top), 0), n_e),
+       "LN n_yy = n_o": (n_at(0, 0.5 * (ga.y0 + ga.y_top), 1), n_o),
+       "pedestal = n_SiO2": (n_at(0, y_mid_ped, 0), np.sqrt(e_s)),
+       "air beside the pedestal": (n_at(0.5 * ga.w_pedestal + 0.3, y_mid_ped, 0), 1.0),
+       "air beside the ridge": (n_at(0.5 * ga.w_base + 0.3, 0.5 * (ga.y0 + ga.y_top), 0), 1.0),
+       "substrate = n_SiO2": (n_at(2.5, ga.y_sub - 0.3, 0), np.sqrt(e_s))}
+check("undercut rib: index at sample points", all(abs(a - b) < 1e-12 for a, b in pts.values()),
+      "; ".join(f"{k}: {a:.4f}" for k, (a, b) in pts.items()))
+
+grid = R.make_grid(6.0, 6.0, 0.05)
+st = M.SolverSettings(nev=4, label_modes=False, store_fields=True, warm_start=False)
+neff = {}
+for t_uc in (0.0, 1.0):
+    g = R.make_geometry(t_ln=0.4, etch_depth=0.4, w_top=1.0, sidewall_deg=70, t_clad=0.0, t_undercut=t_uc)
+    sw_u, _ = M.solve_wavelength(R.RibDielectric(R.align_to_grid(g, grid, frac=1 / 3, warn=False), grid), 1.55, st)
+    pick = {p: int(np.flatnonzero((sw_u.te_frac[0] >= 0.5) == (p == "TE"))[0]) for p in ("TE", "TM")}
+    neff[t_uc] = {p: float(sw_u.neff[0, j]) for p, j in pick.items()}
+    ok = all(sw_u.guided[0, j] and sw_u.converged[0, j] for j in pick.values())
+    check(f"{type(g).__name__} t_undercut = {t_uc}: TE00 / TM00 guided + converged at 1.55 µm", ok,
+          f"n_eff TE {neff[t_uc]['TE']:.5f}, TM {neff[t_uc]['TM']:.5f} (cutoff {sw_u.n_cutoff[0]:.4f})")
+check("the undercut (SiO2 -> air beside the pedestal) lowers n_eff", all(neff[1.0][p] < neff[0.0][p] for p in "TE TM".split()),
+      f"Δn_eff TE {neff[1.0]['TE'] - neff[0.0]['TE']:+.5f}, TM {neff[1.0]['TM'] - neff[0.0]['TM']:+.5f}")
+with tempfile.TemporaryDirectory() as tmp:
+    back = M.ModeSweep.load(sw_u.save(os.path.join(tmp, "u.h5")))
+    check("undercut rib: HDF5 round trip keeps the geometry", back.geometry == sw_u.geometry
+          and isinstance(back.geometry, R.RibGeometryUndercut), back.geometry.describe()[:60])
 
 print("\nALL CHECKS PASSED" if ok_all else "\nSOME CHECKS FAILED")
 sys.exit(0 if ok_all else 1)

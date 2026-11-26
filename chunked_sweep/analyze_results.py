@@ -19,7 +19,8 @@ if "ipykernel" not in sys.modules and len(sys.argv) > 1:    # as a script: pytho
 geoms = rio.list_geometries(RUN)
 if geoms.empty:
     raise SystemExit(f"no geometry results (<name>/<name>_modes.h5) under {os.path.abspath(RUN)}: set RUN")
-print(geoms[["name", "t_ln", "etch_depth", "w_top", "sidewall_deg", "t_clad", "complete"]].to_string())
+print(geoms[[c for c in ("name", "t_ln", "etch_depth", "w_top", "sidewall_deg", "t_clad", "t_undercut", "complete")
+             if c in geoms]].to_string())                    # t_undercut: runs with undercut ribs only
 
 #%% One geometry: dispersion of the tracked modes
 G = geoms.iloc[0]["folder"]

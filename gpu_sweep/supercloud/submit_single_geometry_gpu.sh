@@ -21,7 +21,11 @@ ETCH_DEPTH=0.400        # etch depth [µm] (= T_LN: fully etched)
 W_TOP=1.800             # ridge top width [µm]
 SIDEWALL_DEG=73         # sidewall angle from horizontal [deg]
 T_CLAD=1.350            # inf = SiO2 everywhere above, 0 = air, else planar SiO2 this far above the ridge top [µm]
-GEOM_NAME=""            # empty = built from the parameters (tLN400_etch400_w1800_sw73_clad1350nmSiO2)
+T_UNDERCUT=0            # RIB TYPE: 0 = regular rib (LN on a flat SiO2 substrate). > 0 = UNDERCUT rib: the SiO2
+                        # is etched this deep [µm] below the LN at SIDEWALL_DEG, leaving a SiO2 pedestal with air
+                        # around it; needs T_CLAD=0 and ETCH_DEPTH=T_LN (checked before anything is submitted)
+GEOM_NAME=""            # empty = built from the parameters (tLN400_etch400_w1800_sw73_clad1350nmSiO2; an undercut
+                        # rib gets _undercut<nm>, e.g. tLN400_etch400_w1000_sw70_cladair_undercut1000)
 CHUNKS=gpu              # gpu = gpu_config.py (10 x 10 µm at 6.25 nm) | cpu = chunked_sweep/sweep_config.py's grids
 GPUS=2                  # GPUs (one node has 2); 20 CPU cores are requested per GPU
 TIME=12:00:00           # time limit (bench_gpu.py projects the real time; max 96:00:00)
@@ -76,6 +80,14 @@ if [ -n "$RESUME" ]; then
     echo "resuming $RUN_DIR"
     write_run_info "$RUN_DIR" "resubmitted $(date): $GPUS GPUs, $TIME"
 else
+    GEOM_CSV="$(mktemp)"                                   # checked before a run folder is made
+    trap 'rm -f "$GEOM_CSV"' EXIT
+    {
+        echo "# geometry of this run (µm, degrees; t_undercut: 0 = regular rib, > 0 = undercut rib)"
+        echo "name,t_ln,etch_depth,w_top,sidewall_deg,t_clad,t_undercut"
+        echo "$GEOM_NAME,$T_LN,$ETCH_DEPTH,$W_TOP,$SIDEWALL_DEG,$T_CLAD,$T_UNDERCUT"
+    } > "$GEOM_CSV"
+    check_geometry_csv "$GEOM_CSV" || exit 1
     if [ "$MODE" = dry ]; then
         RUN_DIR="$(mktemp -d)"
         TMP_RUN=1
@@ -83,11 +95,7 @@ else
         RUN_DIR="$(new_run_dir "$OUT_ROOT" "$RUN_NAME$([ "$MODE" = test ] && echo _TEST)")"
     fi
     snapshot_code_gpu "$RUN_DIR"
-    {
-        echo "# geometry of this run (µm, degrees)"
-        echo "name,t_ln,etch_depth,w_top,sidewall_deg,t_clad"
-        echo "$GEOM_NAME,$T_LN,$ETCH_DEPTH,$W_TOP,$SIDEWALL_DEG,$T_CLAD"
-    } > "$RUN_DIR/geometries.csv"
+    cat "$GEOM_CSV" > "$RUN_DIR/geometries.csv"           # not mv: keep the umask mode and the folder's group
     ARGS=(--row 0 --chunks "$CHUNKS" --gpus "$GPUS")
     if [ "$MODE" = test ]; then
         ARGS+=(--test)

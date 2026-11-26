@@ -326,7 +326,8 @@ bash gpu_sweep/supercloud/submit_single_geometry_gpu.sh
 
 The settings block at the top of `submit_single_geometry_gpu.sh` holds:
 
-* the geometry (preset to the baseline's: w_top 1.8, t_clad 1.35);
+* the geometry (preset to the baseline's: w_top 1.8, t_clad 1.35), including the rib type
+  `T_UNDERCUT` (0 = regular rib, > 0 = undercut rib; chunked_sweep/README.md §4.3);
 * `CHUNKS` (`gpu` or `cpu`);
 * `GPUS`;
 * `TIME`: set it from the benchmark's projection plus margin; the default is 12 h.
